@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "backend"
+version = "0.1.0"
+description = "Agentic Financial Analyzer backend"
+authors = ["User <user@example.com>"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "*"
+uvicorn = {version = "*", extras = ["standard"]}
+sqlalchemy = {version = "*", extras = ["asyncio"]}
+asyncpg = "*"
+alembic = "*"
+psycopg2-binary = "*"
+redis = {version = "*", extras = ["hiredis"]}
+langchain = "*"
+langchain-core = "*"
+langchain-groq = "*"
+python-dotenv = "*"
+httpx = "*"
+pydantic = "*"
+pydantic-settings = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
