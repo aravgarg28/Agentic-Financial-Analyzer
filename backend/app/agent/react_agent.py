@@ -34,7 +34,7 @@ Guidelines:
 def _build_llm():
     """Construct a Groq-backed LLM."""
     return ChatGroq(
-        model="llama-3.1-70b-versatile",
+        model="llama-3.3-70b-versatile",
         api_key=settings.groq_api_key,
         temperature=0.1,
         max_tokens=4096,

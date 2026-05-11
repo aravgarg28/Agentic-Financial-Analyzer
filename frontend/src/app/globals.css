@@ -1,130 +1,135 @@
 @import "tailwindcss";
 
 :root {
-  /* Dark theme palette - Bloomberg terminal inspired */
-  --bg-primary: #0a0e17;
-  --bg-secondary: #111827;
-  --bg-card: #1a2235;
-  --bg-card-hover: #1f2a40;
-  --bg-input: #0d1321;
-  --border-color: #1e2d45;
-  --border-accent: #2563eb;
-
+  /* Duolingo / Gamified Theme */
+  --bg-app: #f7f5f2; /* Soft cream/off-white */
+  --bg-sidebar: #1e1e2d; /* Dark navy */
+  --bg-card: #ffffff;
+  
   /* Text */
-  --text-primary: #f0f4f8;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-
-  /* Accent colors */
-  --accent-blue: #3b82f6;
-  --accent-green: #10b981;
-  --accent-red: #ef4444;
-  --accent-amber: #f59e0b;
-  --accent-purple: #8b5cf6;
-  --accent-cyan: #06b6d4;
-
+  --text-primary: #3c3c4b;
+  --text-secondary: #8e8e9f;
+  --text-sidebar: #a0a0b0;
+  
+  /* Bright, candy-like colors */
+  --brand-pink: #ff4b72;
+  --brand-orange: #ff8f3d;
+  --brand-yellow: #ffc800;
+  --brand-green: #58cc02; /* Duolingo green */
+  --brand-green-shadow: #58a700;
+  --brand-blue: #1cb0f6;
+  --brand-blue-shadow: #1899d6;
+  --brand-purple: #ce82ff;
+  
   /* Gradients */
-  --gradient-blue: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  --gradient-green: linear-gradient(135deg, #10b981, #06b6d4);
-  --gradient-amber: linear-gradient(135deg, #f59e0b, #ef4444);
-
-  /* Chart colors */
-  --chart-1: #3b82f6;
-  --chart-2: #8b5cf6;
-  --chart-3: #06b6d4;
-  --chart-4: #10b981;
-  --chart-5: #f59e0b;
-  --chart-6: #ef4444;
-  --chart-7: #ec4899;
-  --chart-8: #14b8a6;
-
-  --font-sans: var(--font-geist-sans), "Inter", system-ui, -apple-system, sans-serif;
-  --font-mono: var(--font-geist-mono), "JetBrains Mono", "Fira Code", monospace;
+  --gradient-hot: linear-gradient(135deg, #ff4b72, #ff8f3d);
+  --gradient-cool: linear-gradient(135deg, #1cb0f6, #ce82ff);
+  
+  /* Structure */
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 32px;
+  
+  /* Shadows - chunky, playful 3D feel */
+  --shadow-soft: 0 8px 24px rgba(60, 60, 75, 0.06);
+  --shadow-3d: 0 4px 0 rgba(220, 220, 230, 1);
+  --shadow-3d-active: 0 0px 0 rgba(220, 220, 230, 1);
+  
+  /* Fonts */
+  --font-heading: var(--font-fredoka), sans-serif;
+  --font-body: var(--font-nunito), sans-serif;
 }
 
 @theme inline {
-  --color-background: var(--bg-primary);
+  --color-background: var(--bg-app);
   --color-foreground: var(--text-primary);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
 }
 
-* {
+*, *::before, *::after {
   box-sizing: border-box;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
+  margin: 0;
+  padding: 0;
 }
 
 body {
-  background: var(--bg-primary);
+  background: var(--bg-app);
   color: var(--text-primary);
-  font-family: var(--font-sans);
-  min-height: 100vh;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  height: 100vh;
+  overflow: hidden;
 }
 
-/* Glassmorphism card */
-.glass-card {
-  background: rgba(26, 34, 53, 0.7);
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--border-color);
+h1, h2, h3, h4, h5, h6, .bubbly-text {
+  font-family: var(--font-heading);
+}
+
+/* 3D Card Style */
+.bubbly-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft), var(--shadow-3d);
+  border: 2px solid #f0f0f5;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+}
+
+.bubbly-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-soft), 0 6px 0 rgba(220, 220, 230, 1);
+}
+
+/* 3D Button Style */
+.bubbly-button {
+  background: var(--brand-blue);
+  color: white;
   border-radius: 16px;
-  transition: all 0.3s ease;
-}
-.glass-card:hover {
-  border-color: rgba(59, 130, 246, 0.3);
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.08);
-}
-
-/* Gradient text */
-.gradient-text {
-  background: var(--gradient-blue);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Pulse animation for loading */
-@keyframes pulse-glow {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
-}
-.pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
+  padding: 12px 24px;
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: none;
+  box-shadow: 0 4px 0 var(--brand-blue-shadow);
+  cursor: pointer;
+  transition: all 0.1s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
-/* Typing indicator */
-@keyframes bounce {
-  0%, 60%, 100% { transform: translateY(0); }
-  30% { transform: translateY(-6px); }
+.bubbly-button:active {
+  transform: translateY(4px);
+  box-shadow: var(--shadow-3d-active);
 }
-.typing-dot {
-  animation: bounce 1.4s infinite;
+
+.bubbly-button.green {
+  background: var(--brand-green);
+  box-shadow: 0 4px 0 var(--brand-green-shadow);
 }
-.typing-dot:nth-child(2) { animation-delay: 0.2s; }
-.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+.bubbly-button.secondary {
+  background: white;
+  color: var(--brand-blue);
+  border: 2px solid #e5e5e5;
+  box-shadow: 0 4px 0 #e5e5e5;
+}
 
 /* Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { 
+  background: #e0e0ea; 
+  border-radius: 99px; 
 }
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
+::-webkit-scrollbar-thumb:hover { background: #c0c0ca; }
 
-/* Shimmer loading */
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+/* Pulse Animation */
+@keyframes bounce-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
 }
-.shimmer {
-  background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-card-hover) 50%, var(--bg-card) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
+.animate-bouncy {
+  animation: bounce-pulse 2s infinite cubic-bezier(0.34, 1.56, 0.64, 1);
 }

@@ -4,13 +4,31 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import calendar
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Body, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import text
 
 from app.database import async_session
+from app.models import Transaction
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
+
+def get_month_range(offset: int):
+    now = datetime.utcnow()
+    # Calculate target month and year
+    month = now.month - offset
+    year = now.year
+    while month <= 0:
+        month += 12
+        year -= 1
+    
+    start_date = datetime(year, month, 1)
+    # Last day of the month
+    last_day = calendar.monthrange(year, month)[1]
+    end_date = datetime(year, month, last_day, 23, 59, 59)
+    return start_date, end_date
 
 
 async def _q(sql: str, params: dict | None = None) -> list[dict]:
@@ -22,19 +40,19 @@ async def _q(sql: str, params: dict | None = None) -> list[dict]:
 @router.get("/spending-by-category")
 async def spending_by_category(
     user_id: str = "user_1",
-    days: int = Query(30, ge=1, le=365),
+    month_offset: int = Query(0, ge=0, le=12),
 ):
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    start_date, end_date = get_month_range(month_offset)
     rows = await _q(
         """
         SELECT category,
                ROUND(CAST(SUM(ABS(amount)) AS numeric), 2) as total,
                COUNT(*) as count
         FROM transactions
-        WHERE user_id = :uid AND amount < 0 AND timestamp >= :cutoff
+        WHERE user_id = :uid AND amount < 0 AND timestamp >= :start_date AND timestamp <= :end_date
         GROUP BY category ORDER BY total DESC
         """,
-        {"uid": user_id, "cutoff": cutoff},
+        {"uid": user_id, "start_date": start_date, "end_date": end_date},
     )
     return {"data": rows}
 
@@ -60,8 +78,11 @@ async def monthly_trends(
 
 
 @router.get("/net-worth")
-async def net_worth(user_id: str = "user_1", days: int = Query(30, ge=1, le=365)):
-    cutoff = datetime.utcnow() - timedelta(days=days)
+async def net_worth(
+    user_id: str = "user_1", 
+    month_offset: int = Query(0, ge=0, le=12)
+):
+    start_date, end_date = get_month_range(month_offset)
     rows = await _q(
         """
         SELECT
@@ -69,9 +90,9 @@ async def net_worth(user_id: str = "user_1", days: int = Query(30, ge=1, le=365)
             ROUND(CAST(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) AS numeric), 2) as total_expenses,
             ROUND(CAST(SUM(amount) AS numeric), 2) as net_flow,
             COUNT(*) as total_transactions
-        FROM transactions WHERE user_id = :uid AND timestamp >= :cutoff
+        FROM transactions WHERE user_id = :uid AND timestamp >= :start_date AND timestamp <= :end_date
         """,
-        {"uid": user_id, "cutoff": cutoff},
+        {"uid": user_id, "start_date": start_date, "end_date": end_date},
     )
     return {"data": rows[0] if rows else {}}
 
@@ -79,30 +100,36 @@ async def net_worth(user_id: str = "user_1", days: int = Query(30, ge=1, le=365)
 @router.get("/top-merchants")
 async def top_merchants(
     user_id: str = "user_1",
-    days: int = Query(30, ge=1, le=365),
+    month_offset: int = Query(0, ge=0, le=12),
     limit: int = Query(10, ge=1, le=50),
 ):
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    start_date, end_date = get_month_range(month_offset)
     rows = await _q(
         """
         SELECT merchant,
                ROUND(CAST(SUM(ABS(amount)) AS numeric), 2) as total,
                COUNT(*) as visit_count
         FROM transactions
-        WHERE user_id = :uid AND amount < 0 AND timestamp >= :cutoff
+        WHERE user_id = :uid AND amount < 0 AND timestamp >= :start_date AND timestamp <= :end_date
         GROUP BY merchant ORDER BY total DESC LIMIT :lim
         """,
-        {"uid": user_id, "cutoff": cutoff, "lim": limit},
+        {"uid": user_id, "start_date": start_date, "end_date": end_date, "lim": limit},
     )
     return {"data": rows}
 
 
 @router.get("/budget-alerts")
 async def budget_alerts(user_id: str = "user_1", days: int = Query(30, ge=1, le=365)):
+    # Budgets calibrated to seed data volume:
+    # 500 tx / 6 months; observed 30-day actuals inform these values
     budgets = {
-        "food": 500, "transport": 300, "shopping": 400,
-        "utilities": 250, "entertainment": 100, "health": 200,
-        "travel": 500,
+        "food": 1500,         # ~25 tx/mo @ avg $45
+        "transport": 2200,    # includes airlines, Hertz, rideshare
+        "shopping": 2500,     # Amazon, Apple Store, IKEA etc.
+        "utilities": 750,     # bills tend to run high in seed
+        "entertainment": 550, # subscriptions + events
+        "health": 1300,       # gym + pharmacy + insurance
+        "travel": 3000,       # hotels + flights — high variance
     }
     cutoff = datetime.utcnow() - timedelta(days=days)
     rows = await _q(
@@ -145,3 +172,25 @@ async def recent_transactions(
         if "timestamp" in r:
             r["timestamp"] = r["timestamp"].isoformat() if hasattr(r["timestamp"], "isoformat") else str(r["timestamp"])
     return {"data": rows}
+
+
+class TransactionInput(BaseModel):
+    merchant: str
+    amount: float
+    category: str
+    description: str = ""
+
+@router.post("/transactions")
+async def add_transaction(tx: TransactionInput, user_id: str = "user_1"):
+    async with async_session() as session:
+        new_tx = Transaction(
+            user_id=user_id,
+            merchant=tx.merchant,
+            amount=tx.amount,
+            category=tx.category,
+            description=tx.description,
+            timestamp=datetime.utcnow()
+        )
+        session.add(new_tx)
+        await session.commit()
+        return {"status": "success", "id": new_tx.id}

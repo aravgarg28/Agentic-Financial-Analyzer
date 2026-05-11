@@ -1,27 +1,32 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Fredoka, Nunito } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
-  variable: "--font-geist-sans",
+const fredoka = Fredoka({
   subsets: ["latin"],
+  variable: "--font-fredoka",
   display: "swap",
+  weight: ["400", "500", "600", "700"],
+});
+
+const nunito = Nunito({
+  subsets: ["latin"],
+  variable: "--font-nunito",
+  display: "swap",
+  weight: ["400", "500", "600", "700", "800"],
 });
 
 export const metadata: Metadata = {
-  title: "Agentic Financial Analyzer",
-  description:
-    "AI-powered financial analysis dashboard with ReAct agent for real-time spending insights, anomaly detection, and budget tracking.",
+  title: "Finlytics — Playful Financial Analyzer",
+  description: "Track your finances with a fun, gamified dashboard.",
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en" className={`${fredoka.variable} ${nunito.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }

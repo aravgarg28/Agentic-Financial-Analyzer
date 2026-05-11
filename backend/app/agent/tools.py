@@ -243,11 +243,11 @@ async def generate_financial_summary(user_id: str = "user_1", days: int = 30) ->
 async def budget_alert(user_id: str = "user_1", days: int = 30) -> str:
     """Check if spending in any category exceeds typical budget thresholds.
     Use this when the user asks about budget, overspending, or wants alerts."""
-    # Default monthly budgets
+    # Budgets calibrated to seed data volume (matches /analytics/budget-alerts)
     budgets = {
-        "food": 500, "transport": 300, "shopping": 400,
-        "utilities": 250, "entertainment": 100, "health": 200,
-        "travel": 500,
+        "food": 1500, "transport": 2200, "shopping": 2500,
+        "utilities": 750, "entertainment": 550, "health": 1300,
+        "travel": 3000,
     }
     cutoff = datetime.utcnow() - timedelta(days=days)
     sql = """

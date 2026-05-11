@@ -6,8 +6,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // ── Analytics REST Endpoints ──────────────────────────────────────────────────
 
-export async function fetchSpendingByCategory(days = 30) {
-  const res = await fetch(`${API_URL}/analytics/spending-by-category?days=${days}`);
+export async function fetchSpendingByCategory(monthOffset = 0) {
+  const res = await fetch(`${API_URL}/analytics/spending-by-category?month_offset=${monthOffset}`);
   if (!res.ok) throw new Error("Failed to fetch spending data");
   const json = await res.json();
   return json.data;
@@ -20,15 +20,15 @@ export async function fetchMonthlyTrends(months = 6) {
   return json.data;
 }
 
-export async function fetchNetWorth(days = 30) {
-  const res = await fetch(`${API_URL}/analytics/net-worth?days=${days}`);
+export async function fetchNetWorth(monthOffset = 0) {
+  const res = await fetch(`${API_URL}/analytics/net-worth?month_offset=${monthOffset}`);
   if (!res.ok) throw new Error("Failed to fetch net worth");
   const json = await res.json();
   return json.data;
 }
 
-export async function fetchTopMerchants(days = 30, limit = 10) {
-  const res = await fetch(`${API_URL}/analytics/top-merchants?days=${days}&limit=${limit}`);
+export async function fetchTopMerchants(monthOffset = 0, limit = 10) {
+  const res = await fetch(`${API_URL}/analytics/top-merchants?month_offset=${monthOffset}&limit=${limit}`);
   if (!res.ok) throw new Error("Failed to fetch merchants");
   const json = await res.json();
   return json.data;
@@ -46,6 +46,16 @@ export async function fetchRecentTransactions(limit = 20) {
   if (!res.ok) throw new Error("Failed to fetch transactions");
   const json = await res.json();
   return json.data;
+}
+
+export async function addTransaction(data: { merchant: string; amount: number; category: string; description?: string }) {
+  const res = await fetch(`${API_URL}/analytics/transactions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to add transaction");
+  return res.json();
 }
 
 // ── Agent SSE Streaming ───────────────────────────────────────────────────────

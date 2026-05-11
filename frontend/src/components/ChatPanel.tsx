@@ -4,233 +4,245 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { streamAgentQuery, AgentEvent } from "@/lib/api";
 
-interface ChatMessage {
+interface Msg {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
-  toolCalls?: { tool: string; input: Record<string, unknown> }[];
-  timestamp: Date;
+  tools?: { tool: string }[];
+  ts: Date;
 }
 
+const msgAnim = {
+  enter:   { opacity: 0, scale: 0.8, y: 20 },
+  visible: { opacity: 1, scale: 1, y: 0, transition: { type: "spring" as const, duration: 0.5, bounce: 0.5 } },
+  exit:    { opacity: 0, scale: 0.8, y: -20, transition: { duration: 0.2 } },
+};
+
+const PROMPTS = [
+  "Summarise my last 30 days 📅",
+  "Which categories am I overspending? 🚨",
+  "Find any unusual transactions 🕵️‍♂️",
+  "What's my savings rate this month? 💰",
+];
+
 export default function ChatPanel() {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "welcome",
-      role: "system",
-      content:
-        "Hello! I'm your AI financial analyst. Ask me anything about your spending, budgets, or financial trends.",
-      timestamp: new Date(),
-    },
-  ]);
+  const [msgs, setMsgs] = useState<Msg[]>([{
+    id: "sys",
+    role: "system",
+    content: "Hi there! I'm your AI helper. 🤖 Ask me anything about your money quests!",
+    ts: new Date(),
+  }]);
   const [input, setInput] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [streaming, setStreaming] = useState(false);
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [activeTools, setActiveTools] = useState<string[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef  = useRef<HTMLInputElement>(null);
 
-  const scrollToBottom = useCallback(() => {
+  const scrollDown = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
+  useEffect(() => { scrollDown(); }, [msgs, streaming, scrollDown]);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, activeTools, scrollToBottom]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isStreaming) return;
-
-    const userMsg: ChatMessage = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content: input.trim(),
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
+  const send = async (text: string) => {
+    if (!text.trim() || streaming) return;
+    const userMsg: Msg = { id: `u${Date.now()}`, role: "user", content: text.trim(), ts: new Date() };
+    setMsgs(p => [...p, userMsg]);
     setInput("");
-    setIsStreaming(true);
+    setStreaming(true);
     setActiveTools([]);
 
-    const toolCalls: { tool: string; input: Record<string, unknown> }[] = [];
+    const tools: { tool: string }[] = [];
     let answer = "";
 
     try {
-      for await (const event of streamAgentQuery(userMsg.content, sessionId)) {
-        const evt = event as AgentEvent;
-        if (evt.event === "session") {
-          setSessionId(evt.data as string);
-        } else if (evt.event === "tool_call") {
-          const data = evt.data as { tool: string; input: Record<string, unknown> };
-          toolCalls.push(data);
-          setActiveTools((prev) => [...prev, data.tool]);
-        } else if (evt.event === "tool_result") {
-          // Tool result received — clear from active
-          setActiveTools((prev) => prev.slice(1));
-        } else if (evt.event === "answer") {
-          answer = evt.data as string;
-        } else if (evt.event === "error") {
-          answer = `⚠️ Error: ${evt.data}`;
-        }
+      for await (const evt of streamAgentQuery(userMsg.content, sessionId)) {
+        const e = evt as AgentEvent;
+        if (e.event === "session")     setSessionId(e.data as string);
+        if (e.event === "tool_call")   { const d = e.data as { tool: string }; tools.push(d); setActiveTools(p => [...p, d.tool]); }
+        if (e.event === "tool_result") setActiveTools(p => p.slice(1));
+        if (e.event === "answer")      answer = e.data as string;
+        if (e.event === "error")       answer = `Oops! Error: ${e.data} 😵`;
       }
     } catch (err) {
-      answer = `⚠️ Connection error: ${err instanceof Error ? err.message : "Unknown error"}`;
+      answer = `Connection error: ${err instanceof Error ? err.message : "Unknown"} 📡`;
     }
 
-    const assistantMsg: ChatMessage = {
-      id: `assistant-${Date.now()}`,
-      role: "assistant",
-      content: answer,
-      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, assistantMsg]);
-    setIsStreaming(false);
+    setMsgs(p => [...p, {
+      id: `a${Date.now()}`, role: "assistant",
+      content: answer, tools: tools.length ? tools : undefined, ts: new Date(),
+    }]);
+    setStreaming(false);
     setActiveTools([]);
     inputRef.current?.focus();
   };
 
-  const toolIcons: Record<string, string> = {
-    query_transactions: "🔍",
-    get_spending_by_category: "📊",
-    get_monthly_trends: "📈",
-    detect_anomalies: "🚨",
-    get_merchant_analysis: "🏪",
-    get_net_worth_snapshot: "💰",
-    generate_financial_summary: "📋",
-    budget_alert: "⚡",
-  };
-
-  const suggestedQueries = [
-    "What did I spend on food last month?",
-    "Show me my monthly spending trends",
-    "Are there any unusual transactions?",
-    "Am I over budget in any category?",
-  ];
+  const fmt = (n: string) => n.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Chat messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+
+      {/* ── Messages ── */}
+      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, padding: "16px 8px 32px", scrollbarWidth: "none" }}>
         <AnimatePresence initial={false}>
-          {messages.map((msg) => (
+          {msgs.map(m => (
             <motion.div
-              key={msg.id}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+              key={m.id}
+              variants={msgAnim}
+              initial="enter" animate="visible" exit="exit"
+              style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", alignItems: "flex-end", gap: 8 }}
             >
-              <div
-                className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-                  msg.role === "user"
-                    ? "bg-[var(--accent-blue)] text-white"
-                    : msg.role === "system"
-                    ? "bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-secondary)]"
-                    : "bg-[var(--bg-card)] border border-[var(--border-color)]"
-                }`}
-              >
-                {/* Tool calls badge */}
-                {msg.toolCalls && msg.toolCalls.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mb-2">
-                    {msg.toolCalls.map((tc, i) => (
-                      <span
-                        key={i}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-muted)]"
-                      >
-                        {toolIcons[tc.tool] || "🔧"} {tc.tool.replace(/_/g, " ")}
+              {m.role !== "user" && (
+                <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--brand-blue)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0, boxShadow: "0 4px 0 var(--brand-blue-shadow)" }}>
+                  🤖
+                </div>
+              )}
+              
+              <div className="bubbly-card" style={{
+                maxWidth: "75%",
+                padding: "14px 18px",
+                borderRadius: m.role === "user" ? "24px 24px 4px 24px" : "24px 24px 24px 4px",
+                background: m.role === "user" ? "var(--brand-green)" : "white",
+                border: "2px solid #e5e5e5",
+                boxShadow: m.role === "user" ? "0 4px 0 var(--brand-green-shadow)" : "0 4px 0 #e5e5e5",
+                color: m.role === "user" ? "white" : "var(--text-primary)",
+              }}>
+                {/* Tool pills */}
+                {m.tools && m.tools.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                    {m.tools.map((t, i) => (
+                      <span key={i} style={{
+                        fontSize: 11, fontWeight: 800, textTransform: "uppercase",
+                        letterSpacing: "0.5px", padding: "4px 10px", borderRadius: 12,
+                        background: "#f0f0f5",
+                        color: "var(--brand-purple)",
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                        border: "2px solid #e0e0ea"
+                      }}>
+                        ⚙️ {fmt(t.tool)}
                       </span>
                     ))}
                   </div>
                 )}
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                <p style={{
+                  fontSize: 16, lineHeight: 1.5, whiteSpace: "pre-wrap", fontWeight: 600
+                }}>
+                  {m.content}
+                </p>
               </div>
+
+              {m.role === "user" && (
+                <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--gradient-hot)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0, boxShadow: "0 4px 0 #e03b5d" }}>
+                  😎
+                </div>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>
 
-        {/* Active tool indicator */}
-        {isStreaming && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex justify-start"
-          >
-            <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl px-4 py-3 max-w-[85%]">
-              {activeTools.length > 0 ? (
-                <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                  <span className="pulse-glow">
-                    {toolIcons[activeTools[activeTools.length - 1]] || "🔧"}
-                  </span>
-                  <span>
-                    Running{" "}
-                    <span className="text-[var(--accent-blue)] font-medium">
-                      {activeTools[activeTools.length - 1]?.replace(/_/g, " ")}
+        {/* Streaming indicator */}
+        <AnimatePresence>
+          {streaming && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ type: "spring", bounce: 0.5 }}
+              style={{ display: "flex", alignItems: "flex-end", gap: 8 }}
+            >
+              <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--brand-blue)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0, boxShadow: "0 4px 0 var(--brand-blue-shadow)" }}>
+                🤖
+              </div>
+              <div className="bubbly-card" style={{
+                padding: "14px 20px", borderRadius: "24px 24px 24px 4px",
+                display: "flex", alignItems: "center", gap: 12,
+                border: "2px solid #e5e5e5", boxShadow: "0 4px 0 #e5e5e5"
+              }}>
+                {activeTools.length > 0 ? (
+                  <>
+                    <span className="animate-bouncy" style={{ fontSize: 20 }}>⚙️</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: "var(--brand-purple)" }}>
+                      {fmt(activeTools[activeTools.length - 1] ?? "")}
                     </span>
-                    ...
-                  </span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5">
-                  <span className="typing-dot w-2 h-2 rounded-full bg-[var(--accent-blue)]" />
-                  <span className="typing-dot w-2 h-2 rounded-full bg-[var(--accent-blue)]" />
-                  <span className="typing-dot w-2 h-2 rounded-full bg-[var(--accent-blue)]" />
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
+                  </>
+                ) : (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", height: 24 }}>
+                    <div className="animate-bouncy" style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--brand-blue)", animationDelay: "0ms" }} />
+                    <div className="animate-bouncy" style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--brand-blue)", animationDelay: "150ms" }} />
+                    <div className="animate-bouncy" style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--brand-blue)", animationDelay: "300ms" }} />
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        {/* Suggestions (only show when no user messages yet) */}
-        {messages.length <= 1 && !isStreaming && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
-            {suggestedQueries.map((q, i) => (
+        {/* Suggested prompts */}
+        {msgs.length <= 1 && !streaming && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12, marginTop: 16, maxWidth: "80%", alignSelf: "center" }}>
+            {PROMPTS.map((q, i) => (
               <motion.button
                 key={i}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 * i }}
-                onClick={() => {
-                  setInput(q);
-                  inputRef.current?.focus();
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ type: "spring", bounce: 0.5, delay: 0.1 * i }}
+                onClick={() => send(q)}
+                className="bubbly-card"
+                style={{
+                  textAlign: "left", padding: "16px 20px",
+                  borderRadius: 20, fontSize: 15, fontWeight: 700,
+                  color: "var(--brand-blue)", cursor: "pointer",
+                  border: "2px solid #e5e5e5", boxShadow: "0 4px 0 #e5e5e5"
                 }}
-                className="text-left text-sm px-3 py-2.5 rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-secondary)] hover:border-[var(--accent-blue)] hover:text-[var(--text-primary)] transition-all duration-200 cursor-pointer"
               >
                 {q}
               </motion.button>
             ))}
           </div>
         )}
-
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
+      {/* ── Input bar ── */}
       <form
-        onSubmit={handleSubmit}
-        className="p-4 border-t border-[var(--border-color)] bg-[var(--bg-secondary)]"
+        onSubmit={e => { e.preventDefault(); send(input); }}
+        style={{
+          padding: "16px 0 24px",
+          display: "flex",
+          gap: 12,
+        }}
       >
-        <div className="flex gap-2">
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about your finances..."
-            disabled={isStreaming}
-            className="flex-1 px-4 py-3 rounded-xl bg-[var(--bg-input)] border border-[var(--border-color)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-blue)] focus:ring-1 focus:ring-[var(--accent-blue)] transition-all text-sm disabled:opacity-50"
-            id="chat-input"
-          />
-          <button
-            type="submit"
-            disabled={isStreaming || !input.trim()}
-            className="px-5 py-3 rounded-xl bg-[var(--accent-blue)] text-white font-medium text-sm hover:bg-blue-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            id="send-button"
-          >
-            {isStreaming ? "..." : "Send"}
-          </button>
-        </div>
+        <input
+          ref={inputRef}
+          id="chat-input"
+          type="text"
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          placeholder="Ask me anything! 💬"
+          disabled={streaming}
+          style={{
+            flex: 1, padding: "16px 20px",
+            borderRadius: 20, fontSize: 16, fontWeight: 600,
+            background: "white",
+            border: "2px solid #e5e5e5",
+            boxShadow: "0 4px 0 #e5e5e5",
+            color: "var(--text-primary)",
+            outline: "none",
+            transition: "all 0.2s ease",
+            fontFamily: "var(--font-body)",
+          }}
+          onFocus={e => { e.currentTarget.style.borderColor = "var(--brand-blue)"; e.currentTarget.style.boxShadow = "0 4px 0 var(--brand-blue-shadow)"; }}
+          onBlur={e  => { e.currentTarget.style.borderColor = "#e5e5e5"; e.currentTarget.style.boxShadow = "0 4px 0 #e5e5e5"; }}
+        />
+        <button
+          className="bubbly-button"
+          id="send-button"
+          type="submit"
+          disabled={streaming || !input.trim()}
+          style={{ height: "100%", padding: "0 24px" }}
+        >
+          {streaming ? "⏳" : "Send 🚀"}
+        </button>
       </form>
     </div>
   );
