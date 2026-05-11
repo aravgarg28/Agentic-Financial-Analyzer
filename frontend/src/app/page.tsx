@@ -98,70 +98,96 @@ export default function Home() {
     <div style={{ display: "flex", height: "100dvh", overflow: "hidden", backgroundColor: "var(--bg-app)" }}>
 
       {/* ── Add Transaction Modal ── */}
-      {showAddLog && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div className="bubbly-card" style={{ padding: 32, width: 400, background: "white", borderRadius: 24, boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}>
-            <h2 className="bubbly-text" style={{ fontSize: 24, marginBottom: 24 }}>New Quest (Add Log) 📝</h2>
-            <form onSubmit={handleAddLog} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div>
-                <label style={{ fontWeight: 800, fontSize: 14, color: "var(--text-secondary)", marginBottom: 8, display: "block" }}>Merchant Name</label>
-                <input required value={formData.merchant} onChange={e => setFormData({ ...formData, merchant: e.target.value })} style={{ width: "100%", padding: 12, borderRadius: 12, border: "2px solid #e5e5e5", fontSize: 16, outline: "none" }} placeholder="e.g. Starbucks" />
-              </div>
-              <div>
-                <label style={{ fontWeight: 800, fontSize: 14, color: "var(--text-secondary)", marginBottom: 8, display: "block" }}>Amount ($)</label>
-                <input required type="number" step="0.01" value={formData.amount} onChange={e => setFormData({ ...formData, amount: e.target.value })} style={{ width: "100%", padding: 12, borderRadius: 12, border: "2px solid #e5e5e5", fontSize: 16, outline: "none" }} placeholder="e.g. 5.50" />
-              </div>
-              <div>
-                <label style={{ fontWeight: 800, fontSize: 14, color: "var(--text-secondary)", marginBottom: 8, display: "block" }}>Category</label>
-                <select value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })} style={{ width: "100%", padding: 12, borderRadius: 12, border: "2px solid #e5e5e5", fontSize: 16, outline: "none" }}>
-                  <option value="food">🍔 Food</option>
-                  <option value="transport">🚕 Transport</option>
-                  <option value="shopping">🛍️ Shopping</option>
-                  <option value="utilities">⚡ Utilities</option>
-                  <option value="entertainment">🍿 Entertainment</option>
-                  <option value="health">💊 Health</option>
-                  <option value="travel">✈️ Travel</option>
-                  <option value="income">💰 Income (Earned)</option>
-                </select>
-              </div>
-              <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
-                <button type="button" className="bubbly-button secondary" onClick={() => setShowAddLog(false)} style={{ flex: 1, padding: "12px" }}>Cancel</button>
-                <button type="submit" className="bubbly-button" style={{ flex: 1, padding: "12px" }}>Save Log</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {showAddLog && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20, filter: "blur(4px)" }}
+              animate={{ scale: 1, y: 0, filter: "blur(0px)" }}
+              exit={{ scale: 0.95, y: 10, filter: "blur(4px)", transition: { duration: 0.15 } }}
+              transition={{ type: "spring", duration: 0.5, bounce: 0.4 }}
+              className="bubbly-card" style={{ padding: 32, width: 400, background: "white", borderRadius: 24, boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}
+            >
+              <h2 className="bubbly-text" style={{ fontSize: 24, marginBottom: 24 }}>New Quest (Add Log) 📝</h2>
+              <form onSubmit={handleAddLog} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div>
+                  <label style={{ fontWeight: 800, fontSize: 14, color: "var(--text-secondary)", marginBottom: 8, display: "block" }}>Merchant Name</label>
+                  <input required value={formData.merchant} onChange={e => setFormData({ ...formData, merchant: e.target.value })} style={{ width: "100%", padding: 12, borderRadius: 12, border: "2px solid #e5e5e5", fontSize: 16, outline: "none" }} placeholder="e.g. Starbucks" />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 800, fontSize: 14, color: "var(--text-secondary)", marginBottom: 8, display: "block" }}>Amount ($)</label>
+                  <input required type="number" step="0.01" value={formData.amount} onChange={e => setFormData({ ...formData, amount: e.target.value })} style={{ width: "100%", padding: 12, borderRadius: 12, border: "2px solid #e5e5e5", fontSize: 16, outline: "none" }} placeholder="e.g. 5.50" />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 800, fontSize: 14, color: "var(--text-secondary)", marginBottom: 8, display: "block" }}>Category</label>
+                  <select value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })} style={{ width: "100%", padding: 12, borderRadius: 12, border: "2px solid #e5e5e5", fontSize: 16, outline: "none" }}>
+                    <option value="food">🍔 Food</option>
+                    <option value="transport">🚕 Transport</option>
+                    <option value="shopping">🛍️ Shopping</option>
+                    <option value="utilities">⚡ Utilities</option>
+                    <option value="entertainment">🍿 Entertainment</option>
+                    <option value="health">💊 Health</option>
+                    <option value="travel">✈️ Travel</option>
+                    <option value="income">💰 Income (Earned)</option>
+                  </select>
+                </div>
+                <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+                  <button type="button" className="bubbly-button secondary" onClick={() => setShowAddLog(false)} style={{ flex: 1, padding: "12px" }}>Cancel</button>
+                  <button type="submit" className="bubbly-button" style={{ flex: 1, padding: "12px" }}>Save Log</button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Link Bank (Plaid) Modal ── */}
-      {showBankLink && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div className="bubbly-card" style={{ padding: 32, width: 400, background: "white", borderRadius: 24, boxShadow: "0 20px 40px rgba(0,0,0,0.2)", textAlign: "center" }}>
-            <h2 className="bubbly-text" style={{ fontSize: 24, marginBottom: 8 }}>Link Your Bank 🏦</h2>
-            <p style={{ color: "var(--text-secondary)", marginBottom: 24 }}>Powered by Plaid</p>
-            
-            {isSyncing ? (
-              <div style={{ padding: 40 }}>
-                <div className="animate-bouncy" style={{ fontSize: 48, marginBottom: 16 }}>🔄</div>
-                <p style={{ fontWeight: 800, color: "var(--brand-blue)" }}>Syncing transactions...</p>
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <button onClick={handleLinkBank} className="bubbly-button secondary" style={{ padding: 16, display: "flex", justifyContent: "space-between", fontSize: 16 }}>
-                  <span>Chase</span> <span>🔵</span>
-                </button>
-                <button onClick={handleLinkBank} className="bubbly-button secondary" style={{ padding: 16, display: "flex", justifyContent: "space-between", fontSize: 16 }}>
-                  <span>Bank of America</span> <span>🔴</span>
-                </button>
-                <button onClick={handleLinkBank} className="bubbly-button secondary" style={{ padding: 16, display: "flex", justifyContent: "space-between", fontSize: 16 }}>
-                  <span>Wells Fargo</span> <span>🟡</span>
-                </button>
-                <button type="button" className="bubbly-button" onClick={() => setShowBankLink(false)} style={{ marginTop: 16, padding: "12px", background: "#f0f0f5", color: "var(--text-secondary)", boxShadow: "none" }}>Cancel</button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {showBankLink && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20, filter: "blur(4px)" }}
+              animate={{ scale: 1, y: 0, filter: "blur(0px)" }}
+              exit={{ scale: 0.95, y: 10, filter: "blur(4px)", transition: { duration: 0.15 } }}
+              transition={{ type: "spring", duration: 0.5, bounce: 0.4 }}
+              className="bubbly-card" style={{ padding: 32, width: 400, background: "white", borderRadius: 24, boxShadow: "0 20px 40px rgba(0,0,0,0.2)", textAlign: "center" }}
+            >
+              <h2 className="bubbly-text" style={{ fontSize: 24, marginBottom: 8 }}>Link Your Bank 🏦</h2>
+              <p style={{ color: "var(--text-secondary)", marginBottom: 24 }}>Powered by Plaid</p>
+              
+              {isSyncing ? (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 40 }}>
+                  <div className="animate-bouncy" style={{ fontSize: 48, marginBottom: 16 }}>🔄</div>
+                  <p style={{ fontWeight: 800, color: "var(--brand-blue)" }}>Syncing transactions...</p>
+                </motion.div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <button onClick={handleLinkBank} className="bubbly-button secondary" style={{ padding: 16, display: "flex", justifyContent: "space-between", fontSize: 16 }}>
+                    <span>Chase</span> <span>🔵</span>
+                  </button>
+                  <button onClick={handleLinkBank} className="bubbly-button secondary" style={{ padding: 16, display: "flex", justifyContent: "space-between", fontSize: 16 }}>
+                    <span>Bank of America</span> <span>🔴</span>
+                  </button>
+                  <button onClick={handleLinkBank} className="bubbly-button secondary" style={{ padding: 16, display: "flex", justifyContent: "space-between", fontSize: 16 }}>
+                    <span>Wells Fargo</span> <span>🟡</span>
+                  </button>
+                  <button type="button" className="bubbly-button" onClick={() => setShowBankLink(false)} style={{ marginTop: 16, padding: "12px", background: "#f0f0f5", color: "var(--text-secondary)", boxShadow: "none" }}>Cancel</button>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Sidebar (Dark Gamified Style) ────────────────────── */}
       <nav style={{
