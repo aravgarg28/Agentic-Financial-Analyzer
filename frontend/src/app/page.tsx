@@ -19,9 +19,18 @@ const slide = {
 };
 
 export default function Home() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [tab, setTab] = useState<Tab>("dashboard");
   const [showAddLog, setShowAddLog] = useState(false);
+  const [showBankLink, setShowBankLink] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [formData, setFormData] = useState({ merchant: "", amount: "", category: "food" });
+  const [loginData, setLoginData] = useState({ username: "player1", password: "password" });
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoggedIn(true);
+  };
 
   const handleAddLog = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,6 +48,51 @@ export default function Home() {
       alert("Error adding transaction. Please try again.");
     }
   };
+
+  const handleLinkBank = () => {
+    setIsSyncing(true);
+    setTimeout(() => {
+      setIsSyncing(false);
+      setShowBankLink(false);
+      alert("✅ Successfully synced 42 new transactions from Chase Bank via Plaid Sandbox!");
+    }, 2000);
+  };
+
+  if (!isLoggedIn) {
+    return (
+      <div style={{ display: "flex", height: "100dvh", width: "100vw", background: "var(--bg-app)", alignItems: "center", justifyContent: "center" }}>
+        <div className="bubbly-card" style={{ padding: 40, width: 400, textAlign: "center" }}>
+          <div className="animate-bouncy" style={{ fontSize: 64, marginBottom: 16 }}>🎮</div>
+          <h1 className="bubbly-text" style={{ fontSize: 32, marginBottom: 8 }}>Finlytics</h1>
+          <p style={{ color: "var(--text-secondary)", fontWeight: 700, marginBottom: 32 }}>Level up your wealth.</p>
+          
+          <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <input 
+              required 
+              value={loginData.username} 
+              onChange={e => setLoginData({...loginData, username: e.target.value})} 
+              placeholder="Username" 
+              style={{ width: "100%", padding: 16, borderRadius: 16, border: "2px solid #e5e5e5", fontSize: 16, outline: "none", fontWeight: 700 }} 
+            />
+            <input 
+              required 
+              type="password"
+              value={loginData.password} 
+              onChange={e => setLoginData({...loginData, password: e.target.value})} 
+              placeholder="Password" 
+              style={{ width: "100%", padding: 16, borderRadius: 16, border: "2px solid #e5e5e5", fontSize: 16, outline: "none", fontWeight: 700 }} 
+            />
+            <button type="submit" className="bubbly-button" style={{ padding: 16, fontSize: 18, marginTop: 8 }}>
+              START GAME
+            </button>
+          </form>
+          <p style={{ marginTop: 24, fontSize: 12, color: "var(--text-secondary)", fontWeight: 700 }}>
+            Demo Account: player1 / password
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", height: "100dvh", overflow: "hidden", backgroundColor: "var(--bg-app)" }}>
@@ -75,6 +129,36 @@ export default function Home() {
                 <button type="submit" className="bubbly-button" style={{ flex: 1, padding: "12px" }}>Save Log</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Link Bank (Plaid) Modal ── */}
+      {showBankLink && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className="bubbly-card" style={{ padding: 32, width: 400, background: "white", borderRadius: 24, boxShadow: "0 20px 40px rgba(0,0,0,0.2)", textAlign: "center" }}>
+            <h2 className="bubbly-text" style={{ fontSize: 24, marginBottom: 8 }}>Link Your Bank 🏦</h2>
+            <p style={{ color: "var(--text-secondary)", marginBottom: 24 }}>Powered by Plaid</p>
+            
+            {isSyncing ? (
+              <div style={{ padding: 40 }}>
+                <div className="animate-bouncy" style={{ fontSize: 48, marginBottom: 16 }}>🔄</div>
+                <p style={{ fontWeight: 800, color: "var(--brand-blue)" }}>Syncing transactions...</p>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <button onClick={handleLinkBank} className="bubbly-button secondary" style={{ padding: 16, display: "flex", justifyContent: "space-between", fontSize: 16 }}>
+                  <span>Chase</span> <span>🔵</span>
+                </button>
+                <button onClick={handleLinkBank} className="bubbly-button secondary" style={{ padding: 16, display: "flex", justifyContent: "space-between", fontSize: 16 }}>
+                  <span>Bank of America</span> <span>🔴</span>
+                </button>
+                <button onClick={handleLinkBank} className="bubbly-button secondary" style={{ padding: 16, display: "flex", justifyContent: "space-between", fontSize: 16 }}>
+                  <span>Wells Fargo</span> <span>🟡</span>
+                </button>
+                <button type="button" className="bubbly-button" onClick={() => setShowBankLink(false)} style={{ marginTop: 16, padding: "12px", background: "#f0f0f5", color: "var(--text-secondary)", boxShadow: "none" }}>Cancel</button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -211,6 +295,13 @@ export default function Home() {
               onClick={() => alert("No new notifications at this time.")}
             >
               🔔
+            </button>
+            <button 
+              className="bubbly-button secondary" 
+              style={{ padding: "8px 16px" }}
+              onClick={() => setShowBankLink(true)}
+            >
+              🔗 Link Bank
             </button>
             <button 
               className="bubbly-button" 

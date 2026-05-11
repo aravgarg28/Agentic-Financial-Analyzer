@@ -118,19 +118,29 @@ async def top_merchants(
     return {"data": rows}
 
 
+@router.get("/budgets")
+async def get_budgets(user_id: str = "user_1"):
+    rows = await _q("SELECT category, amount FROM budgets WHERE user_id = :uid", {"uid": user_id})
+    return {"data": {r["category"]: r["amount"] for r in rows}}
+
+class BudgetUpdate(BaseModel):
+    amount: float
+
+@router.put("/budgets/{category}")
+async def update_budget(category: str, b: BudgetUpdate, user_id: str = "user_1"):
+    async with async_session() as session:
+        await session.execute(
+            text("UPDATE budgets SET amount = :amt WHERE user_id = :uid AND category = :cat"),
+            {"amt": b.amount, "uid": user_id, "cat": category}
+        )
+        await session.commit()
+    return {"status": "success", "category": category, "amount": b.amount}
+
 @router.get("/budget-alerts")
 async def budget_alerts(user_id: str = "user_1", days: int = Query(30, ge=1, le=365)):
-    # Budgets calibrated to seed data volume:
-    # 500 tx / 6 months; observed 30-day actuals inform these values
-    budgets = {
-        "food": 1500,         # ~25 tx/mo @ avg $45
-        "transport": 2200,    # includes airlines, Hertz, rideshare
-        "shopping": 2500,     # Amazon, Apple Store, IKEA etc.
-        "utilities": 750,     # bills tend to run high in seed
-        "entertainment": 550, # subscriptions + events
-        "health": 1300,       # gym + pharmacy + insurance
-        "travel": 3000,       # hotels + flights — high variance
-    }
+    budget_rows = await _q("SELECT category, amount FROM budgets WHERE user_id = :uid", {"uid": user_id})
+    budgets = {r["category"]: r["amount"] for r in budget_rows}
+    
     cutoff = datetime.utcnow() - timedelta(days=days)
     rows = await _q(
         """

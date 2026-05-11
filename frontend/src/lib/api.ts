@@ -58,6 +58,13 @@ export async function addTransaction(data: { merchant: string; amount: number; c
   return res.json();
 }
 
+export async function fetchBudgets() {
+  const res = await fetch(`${API_URL}/analytics/budgets`);
+  if (!res.ok) throw new Error("Failed to fetch budgets");
+  const json = await res.json();
+  return json.data;
+}
+
 // ── Agent SSE Streaming ───────────────────────────────────────────────────────
 
 export interface AgentEvent {

@@ -6,7 +6,8 @@ import asyncio
 import random
 from datetime import datetime, timedelta
 from app.database import engine, async_session, Base
-from app.models import Transaction
+from app.models import Transaction, User, Budget
+import hashlib
 
 # Realistic merchant names per category
 MERCHANTS = {
@@ -114,10 +115,26 @@ async def seed():
 
     rows = generate_transactions(500)
     async with async_session() as session:
+        # Create default user
+        user = User(
+            id="user_1",
+            username="player1",
+            password_hash=hashlib.sha256("password".encode()).hexdigest()
+        )
+        session.add(user)
+        
+        # Create default budgets
+        default_budgets = {
+            "food": 1500.0, "transport": 2200.0, "shopping": 4500.0,
+            "utilities": 1500.0, "entertainment": 600.0, "health": 1800.0, "travel": 7000.0,
+        }
+        for cat, amt in default_budgets.items():
+            session.add(Budget(user_id="user_1", category=cat, amount=amt))
+
         for row in rows:
             session.add(Transaction(**row))
         await session.commit()
-    print(f"✅ Seeded {len(rows)} transactions")
+    print(f"✅ Seeded users, budgets, and {len(rows)} transactions")
 
 
 if __name__ == "__main__":

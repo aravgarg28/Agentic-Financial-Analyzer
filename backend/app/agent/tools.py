@@ -243,12 +243,11 @@ async def generate_financial_summary(user_id: str = "user_1", days: int = 30) ->
 async def budget_alert(user_id: str = "user_1", days: int = 30) -> str:
     """Check if spending in any category exceeds typical budget thresholds.
     Use this when the user asks about budget, overspending, or wants alerts."""
-    # Budgets calibrated to seed data volume (matches /analytics/budget-alerts)
-    budgets = {
-        "food": 1500, "transport": 2200, "shopping": 2500,
-        "utilities": 750, "entertainment": 550, "health": 1300,
-        "travel": 3000,
-    }
+    # Fetch budgets from DB
+    budget_sql = "SELECT category, amount FROM budgets WHERE user_id = :user_id"
+    budget_rows = await _run_query(budget_sql, {"user_id": user_id})
+    budgets = {r["category"]: r["amount"] for r in budget_rows}
+    
     cutoff = datetime.utcnow() - timedelta(days=days)
     sql = """
         SELECT category, ROUND(CAST(SUM(ABS(amount)) AS numeric), 2) as total
@@ -275,6 +274,30 @@ async def budget_alert(user_id: str = "user_1", days: int = 30) -> str:
     return json.dumps(alerts, default=str)
 
 
+# ── Tool 9 — Get Budgets ──────────────────────────────────────────────────────
+
+@tool
+async def get_budgets(user_id: str = "user_1") -> str:
+    """Get the user's current budget goals for each category.
+    Use this when the user asks what their budgets are."""
+    sql = "SELECT category, amount FROM budgets WHERE user_id = :user_id"
+    rows = await _run_query(sql, {"user_id": user_id})
+    return json.dumps(rows, default=str)
+
+
+# ── Tool 10 — Update Budget ──────────────────────────────────────────────────
+
+@tool
+async def update_budget(category: str, amount: float, user_id: str = "user_1") -> str:
+    """Update the user's budget goal for a specific category.
+    Use this when the user asks to change or set a budget (e.g., 'change my food budget to $500')."""
+    sql = "UPDATE budgets SET amount = :amount WHERE user_id = :user_id AND category = :category"
+    async with async_session() as session:
+        await session.execute(text(sql), {"amount": amount, "user_id": user_id, "category": category})
+        await session.commit()
+    return f"Successfully updated budget for {category} to ${amount}."
+
+
 # ── Export all tools ──────────────────────────────────────────────────────────
 
 ALL_TOOLS = [
@@ -286,4 +309,6 @@ ALL_TOOLS = [
     get_net_worth_snapshot,
     generate_financial_summary,
     budget_alert,
+    get_budgets,
+    update_budget,
 ]

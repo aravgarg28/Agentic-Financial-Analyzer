@@ -12,14 +12,10 @@ import {
   fetchNetWorth,
   fetchTopMerchants,
   fetchRecentTransactions,
+  fetchBudgets,
 } from "@/lib/api";
 
 const PALETTE = ["#ff4b72", "#ff8f3d", "#58cc02", "#1cb0f6", "#ce82ff", "#ffc800"];
-
-const BUDGETS: Record<string, number> = {
-  food: 1500, transport: 2200, shopping: 4500,
-  utilities: 1500, entertainment: 600, health: 1800, travel: 7000,
-};
 
 const CATEGORY_EMOJIS: Record<string, string> = {
   food: "🍔", transport: "🚕", shopping: "🛍️", utilities: "⚡",
@@ -63,25 +59,28 @@ export default function DashboardCharts() {
   const [net,      setNet]      = useState<NetWorth | null>(null);
   const [merchants,setMerchants]= useState<Merchant[]>([]);
   const [txns,     setTxns]     = useState<Tx[]>([]);
+  const [budgets,  setBudgets]  = useState<Record<string, number>>({});
   const [loading,  setLoading]  = useState(true);
   const [monthOffset, setMonthOffset] = useState(0);
+  const [trendMonths, setTrendMonths] = useState(6);
 
   useEffect(() => {
     setLoading(true);
     (async () => {
       try {
-        const [s, t, n, m, tx] = await Promise.all([
+        const [s, t, n, m, tx, b] = await Promise.all([
           fetchSpendingByCategory(monthOffset),
-          fetchMonthlyTrends(6),
+          fetchMonthlyTrends(trendMonths),
           fetchNetWorth(monthOffset),
           fetchTopMerchants(monthOffset, 8),
           fetchRecentTransactions(10),
+          fetchBudgets()
         ]);
-        setSpending(s); setTrends(t); setNet(n); setMerchants(m); setTxns(tx);
+        setSpending(s); setTrends(t); setNet(n); setMerchants(m); setTxns(tx); setBudgets(b);
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     })();
-  }, [monthOffset]);
+  }, [monthOffset, trendMonths]);
 
   if (loading) {
     return (
@@ -168,7 +167,22 @@ export default function DashboardCharts() {
         <motion.div variants={item} className="bubbly-card" style={{ padding: "24px 24px 16px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
             <h3 className="bubbly-text" style={{ fontSize: 20 }}>Level Progress 📈</h3>
-            <button className="bubbly-button secondary" style={{ padding: "6px 12px", fontSize: 12, borderRadius: 12 }}>6 Months</button>
+            <div style={{ display: "flex", gap: 8, background: "#f0f0f5", padding: 4, borderRadius: 12 }}>
+              {[1, 3, 6].map(m => (
+                <button 
+                  key={m}
+                  onClick={() => setTrendMonths(m)}
+                  style={{ 
+                    padding: "4px 12px", fontSize: 12, borderRadius: 8, fontWeight: 800, border: "none", cursor: "pointer",
+                    background: trendMonths === m ? "white" : "transparent",
+                    color: trendMonths === m ? "var(--brand-blue)" : "var(--text-secondary)",
+                    boxShadow: trendMonths === m ? "0 2px 8px rgba(0,0,0,0.1)" : "none"
+                  }}
+                >
+                  {m}M
+                </button>
+              ))}
+            </div>
           </div>
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={trends}>
@@ -195,7 +209,7 @@ export default function DashboardCharts() {
         <motion.div variants={item} className="bubbly-card" style={{ padding: 24 }}>
           <h3 className="bubbly-text" style={{ fontSize: 20, marginBottom: 20 }}>Budget Quests 🎯</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {Object.entries(BUDGETS).map(([cat, budget], i) => {
+            {Object.entries(budgets).map(([cat, budget], i) => {
               const spent = spendMap[cat] ?? 0;
               const pct = Math.round((spent / budget) * 100);
               const isOver = spent > budget;
