@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import {
   AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer,
+  CartesianGrid
 } from "recharts";
 import {
   fetchSpendingByCategory,
@@ -15,12 +16,7 @@ import {
   fetchBudgets,
 } from "@/lib/api";
 
-const PALETTE = ["#ff4b72", "#ff8f3d", "#58cc02", "#1cb0f6", "#ce82ff", "#ffc800"];
-
-const CATEGORY_EMOJIS: Record<string, string> = {
-  food: "🍔", transport: "🚕", shopping: "🛍️", utilities: "⚡",
-  entertainment: "🍿", health: "💊", travel: "✈️"
-};
+const PALETTE = ["#00e5ff", "#00ff88", "#ce82ff", "#ffc800", "#ff4b72", "#1cb0f6"];
 
 const container = {
   hidden: {},
@@ -28,9 +24,9 @@ const container = {
 };
 
 const item = {
-  hidden: { opacity: 0, scale: 0.8, y: 20 },
+  hidden: { opacity: 0, scale: 0.95, y: 10 },
   show:   { opacity: 1, scale: 1, y: 0,
-            transition: { type: "spring" as const, duration: 0.6, bounce: 0.5 } },
+            transition: { type: "spring" as const, duration: 0.6, bounce: 0.3 } },
 };
 
 type Spending = { category: string; total: number; count: number };
@@ -42,10 +38,10 @@ type Tx       = { id: number; merchant: string; amount: number; category: string
 function ChartTip({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bubbly-card" style={{ padding: "12px 16px", border: "none", boxShadow: "0 8px 24px rgba(0,0,0,0.15)" }}>
-      <p style={{ color: "var(--text-secondary)", fontWeight: 700, marginBottom: 8 }}>{label}</p>
+    <div className="glass-panel" style={{ padding: "12px 16px", background: "rgba(0,0,0,0.8)" }}>
+      <p style={{ color: "var(--text-secondary)", fontSize: 12, textTransform: "uppercase", letterSpacing: "1px", marginBottom: 8 }}>{label}</p>
       {payload.map((e, i) => (
-        <p key={i} style={{ color: e.color, fontWeight: 800, fontSize: 16 }}>
+        <p key={i} style={{ color: e.color || "white", fontWeight: 500, fontSize: 14 }}>
           {e.name}: ${Number(e.value).toLocaleString()}
         </p>
       ))}
@@ -53,7 +49,7 @@ function ChartTip({ active, payload, label }: { active?: boolean; payload?: any[
   );
 }
 
-export default function DashboardCharts() {
+export default function DashboardCharts({ userId }: { userId: string }) {
   const [spending, setSpending] = useState<Spending[]>([]);
   const [trends,   setTrends]   = useState<Trend[]>([]);
   const [net,      setNet]      = useState<NetWorth | null>(null);
@@ -69,23 +65,24 @@ export default function DashboardCharts() {
     (async () => {
       try {
         const [s, t, n, m, tx, b] = await Promise.all([
-          fetchSpendingByCategory(monthOffset),
-          fetchMonthlyTrends(trendMonths),
-          fetchNetWorth(monthOffset),
-          fetchTopMerchants(monthOffset, 8),
-          fetchRecentTransactions(10),
-          fetchBudgets()
+          fetchSpendingByCategory(userId, monthOffset),
+          fetchMonthlyTrends(userId, trendMonths),
+          fetchNetWorth(userId, monthOffset),
+          fetchTopMerchants(userId, monthOffset, 8),
+          fetchRecentTransactions(userId, 10),
+          fetchBudgets(userId)
         ]);
         setSpending(s); setTrends(t); setNet(n); setMerchants(m); setTxns(tx); setBudgets(b);
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     })();
-  }, [monthOffset, trendMonths]);
+  }, [userId, monthOffset, trendMonths]);
 
   if (loading) {
     return (
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}>
-        <div className="animate-bouncy" style={{ fontSize: 64 }}>🪙</div>
+        <div style={{ width: 40, height: 40, border: "2px solid var(--text-secondary)", borderTopColor: "var(--brand-accent)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+        <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
@@ -103,211 +100,166 @@ export default function DashboardCharts() {
       {/* Month Selector */}
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12 }}>
         <button 
-          className="bubbly-button secondary" 
+          className="sleek-button secondary" 
           onClick={() => setMonthOffset(p => Math.min(p + 1, 11))}
-          style={{ padding: "8px 16px", borderRadius: 12, fontSize: 14 }}
         >
-          ⬅️ Prev Month
+          &larr; Prev
         </button>
-        <div style={{ fontWeight: 800, color: "var(--text-primary)", fontSize: 16, minWidth: 140, textAlign: "center" }}>
-          {monthOffset === 0 ? "This Month 📅" : monthOffset === 1 ? "Last Month 📅" : `${monthOffset} Months Ago 📅`}
+        <div className="sleek-text" style={{ fontSize: 14, minWidth: 120, textAlign: "center", textTransform: "uppercase", letterSpacing: "1px" }}>
+          {monthOffset === 0 ? "This Month" : monthOffset === 1 ? "Last Month" : `${monthOffset} Months Ago`}
         </div>
         <button 
-          className="bubbly-button secondary" 
+          className="sleek-button secondary" 
           onClick={() => setMonthOffset(p => Math.max(p - 1, 0))}
           disabled={monthOffset === 0}
-          style={{ padding: "8px 16px", borderRadius: 12, fontSize: 14, opacity: monthOffset === 0 ? 0.5 : 1 }}
+          style={{ opacity: monthOffset === 0 ? 0.5 : 1 }}
         >
-          Next Month ➡️
+          Next &rarr;
         </button>
       </div>
 
-      {/* Overview Stats Row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24 }}>
+      {/* Metrics Row */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 24 }}>
+        <motion.div variants={item} className="glass-panel" style={{ padding: 24 }}>
+          <p style={{ color: "var(--text-secondary)", fontSize: 12, textTransform: "uppercase", letterSpacing: "1px", marginBottom: 8 }}>Total Income</p>
+          <h3 className="sleek-text" style={{ fontSize: 32, color: "var(--text-primary)" }}>${(income).toLocaleString()}</h3>
+        </motion.div>
         
-        {/* Income Card (Hot gradient) */}
-        <motion.div variants={item} className="bubbly-card" style={{ padding: 24, background: "var(--gradient-hot)", color: "white", border: "none" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <p style={{ fontWeight: 700, opacity: 0.9, marginBottom: 8 }}>Total Income 💰</p>
-              <h3 className="bubbly-text" style={{ fontSize: 36, lineHeight: 1 }}>${(income / 1000).toFixed(1)}k</h3>
-            </div>
-            <div style={{ background: "rgba(255,255,255,0.2)", borderRadius: 12, padding: "8px 12px", fontWeight: 800 }}>+12%</div>
-          </div>
+        <motion.div variants={item} className="glass-panel" style={{ padding: 24 }}>
+          <p style={{ color: "var(--text-secondary)", fontSize: 12, textTransform: "uppercase", letterSpacing: "1px", marginBottom: 8 }}>Total Spent</p>
+          <h3 className="sleek-text" style={{ fontSize: 32, color: "var(--text-primary)" }}>${(expenses).toLocaleString()}</h3>
         </motion.div>
-
-        {/* Expenses Card (Cool gradient) */}
-        <motion.div variants={item} className="bubbly-card" style={{ padding: 24, background: "var(--gradient-cool)", color: "white", border: "none" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <p style={{ fontWeight: 700, opacity: 0.9, marginBottom: 8 }}>Total Spent 💸</p>
-              <h3 className="bubbly-text" style={{ fontSize: 36, lineHeight: 1 }}>${(expenses / 1000).toFixed(1)}k</h3>
-            </div>
-            <div style={{ background: "rgba(255,255,255,0.2)", borderRadius: 12, padding: "8px 12px", fontWeight: 800 }}>-5%</div>
-          </div>
-        </motion.div>
-
-        {/* Net Flow Card (White bubbly) */}
-        <motion.div variants={item} className="bubbly-card" style={{ padding: 24, display: "flex", alignItems: "center", gap: 20 }}>
-          <div style={{ fontSize: 48 }} className="animate-bouncy">
-            {flow >= 0 ? "🤑" : "😰"}
-          </div>
-          <div>
-            <p style={{ color: "var(--text-secondary)", fontWeight: 700, marginBottom: 4 }}>Net Flow</p>
-            <h3 className="bubbly-text" style={{ fontSize: 32, color: flow >= 0 ? "var(--brand-green)" : "var(--brand-pink)" }}>
-              {flow >= 0 ? "+" : ""}${(flow / 1000).toFixed(1)}k
-            </h3>
-          </div>
+        
+        <motion.div variants={item} className="glass-panel" style={{ padding: 24 }}>
+          <p style={{ color: "var(--text-secondary)", fontSize: 12, textTransform: "uppercase", letterSpacing: "1px", marginBottom: 8 }}>Net Flow</p>
+          <h3 className="sleek-text" style={{ fontSize: 32, color: flow >= 0 ? "var(--brand-success)" : "var(--brand-error)" }}>
+            {flow >= 0 ? "+" : "-"}${(Math.abs(flow)).toLocaleString()}
+          </h3>
         </motion.div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
         
         {/* Monthly Trends */}
-        <motion.div variants={item} className="bubbly-card" style={{ padding: "24px 24px 16px" }}>
+        <motion.div variants={item} className="glass-panel" style={{ padding: "24px 24px 16px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-            <h3 className="bubbly-text" style={{ fontSize: 20 }}>Level Progress 📈</h3>
-            <div style={{ display: "flex", gap: 8, background: "#f0f0f5", padding: 4, borderRadius: 12 }}>
+            <h3 className="sleek-text" style={{ fontSize: 18 }}>Cash Flow Trends</h3>
+            <div style={{ display: "flex", gap: 8 }}>
               {[1, 3, 6].map(m => (
                 <button 
                   key={m}
                   onClick={() => setTrendMonths(m)}
-                  style={{ 
-                    padding: "4px 12px", fontSize: 12, borderRadius: 8, fontWeight: 800, border: "none", cursor: "pointer",
-                    background: trendMonths === m ? "white" : "transparent",
-                    color: trendMonths === m ? "var(--brand-blue)" : "var(--text-secondary)",
-                    boxShadow: trendMonths === m ? "0 2px 8px rgba(0,0,0,0.1)" : "none"
-                  }}
+                  className={`sleek-button ${trendMonths === m ? "primary" : "secondary"}`}
+                  style={{ padding: "4px 12px", fontSize: 12 }}
                 >
                   {m}M
                 </button>
               ))}
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={trends}>
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={[...trends].reverse()} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="gInc" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--brand-green)" stopOpacity={0.4} />
-                  <stop offset="100%" stopColor="var(--brand-green)" stopOpacity={0} />
+                  <stop offset="0%" stopColor="var(--brand-success)" stopOpacity={0.3} />
+                  <stop offset="100%" stopColor="var(--brand-success)" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="gExp" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--brand-pink)" stopOpacity={0.4} />
-                  <stop offset="100%" stopColor="var(--brand-pink)" stopOpacity={0} />
+                  <stop offset="0%" stopColor="var(--brand-error)" stopOpacity={0.3} />
+                  <stop offset="100%" stopColor="var(--brand-error)" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <XAxis dataKey="month" tick={{ fill: "var(--text-secondary)", fontWeight: 700, fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: "var(--text-secondary)", fontWeight: 700, fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v/1000}k`} width={40} />
-              <Tooltip content={<ChartTip />} cursor={{ stroke: 'rgba(0,0,0,0.1)', strokeWidth: 2 }} />
-              <Area type="monotone" dataKey="income" stroke="var(--brand-green)" strokeWidth={4} fill="url(#gInc)" name="Income" />
-              <Area type="monotone" dataKey="spending" stroke="var(--brand-pink)" strokeWidth={4} fill="url(#gExp)" name="Spending" />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+              <XAxis dataKey="month" tick={{ fill: "var(--text-secondary)", fontSize: 12 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: "var(--text-secondary)", fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}`} width={60} />
+              <Tooltip content={<ChartTip />} cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1 }} />
+              <Area type="monotone" dataKey="income" stroke="var(--brand-success)" strokeWidth={2} fill="url(#gInc)" name="Income" />
+              <Area type="monotone" dataKey="spending" stroke="var(--brand-error)" strokeWidth={2} fill="url(#gExp)" name="Spending" />
             </AreaChart>
           </ResponsiveContainer>
         </motion.div>
 
+        {/* Spending Distribution */}
+        <motion.div variants={item} className="glass-panel" style={{ padding: "24px 24px 16px" }}>
+          <h3 className="sleek-text" style={{ fontSize: 18, marginBottom: 24 }}>Spending Distribution</h3>
+          {spending.length > 0 ? (
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie
+                  data={spending}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={70}
+                  outerRadius={100}
+                  paddingAngle={2}
+                  dataKey="total"
+                  stroke="none"
+                >
+                  {spending.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<ChartTip />} />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 260, color: "var(--text-secondary)" }}>No data</div>
+          )}
+        </motion.div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+        
         {/* Budget Goals */}
-        <motion.div variants={item} className="bubbly-card" style={{ padding: 24 }}>
-          <h3 className="bubbly-text" style={{ fontSize: 20, marginBottom: 20 }}>Budget Quests 🎯</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <motion.div variants={item} className="glass-panel" style={{ padding: 24 }}>
+          <h3 className="sleek-text" style={{ fontSize: 18, marginBottom: 24 }}>Budget Utilization</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             {Object.entries(budgets).map(([cat, budget], i) => {
               const spent = spendMap[cat] ?? 0;
               const pct = Math.round((spent / budget) * 100);
               const isOver = spent > budget;
-              const color = isOver ? "var(--brand-pink)" : (pct > 80 ? "var(--brand-orange)" : "var(--brand-blue)");
+              const color = isOver ? "var(--brand-error)" : "var(--brand-accent)";
               
               return (
-                <div key={cat} style={{ display: "grid", gridTemplateColumns: "32px 1fr", gap: 16, alignItems: "center" }}>
-                  <div style={{ fontSize: 24, background: "#f0f0f5", width: 40, height: 40, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {CATEGORY_EMOJIS[cat] || "✨"}
+                <div key={cat} style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 14, textTransform: "capitalize", color: "var(--text-primary)" }}>{cat}</span>
+                    <span style={{ fontSize: 14, color: isOver ? "var(--brand-error)" : "var(--text-secondary)" }}>
+                      ${spent.toLocaleString()} / ${budget.toLocaleString()}
+                    </span>
                   </div>
-                  <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                      <span style={{ fontWeight: 800, textTransform: "capitalize", color: "var(--text-primary)" }}>{cat}</span>
-                      <span style={{ fontWeight: 800, color: isOver ? "var(--brand-pink)" : "var(--text-secondary)" }}>
-                        {isOver ? `Over by $${(spent - budget).toLocaleString()}! 😱` : `${pct}%`}
-                      </span>
-                    </div>
-                    {/* Chunky Progress Bar */}
-                    <div style={{ height: 16, background: "#f0f0f5", borderRadius: 99, overflow: "hidden", position: "relative" }}>
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${Math.min(pct, 100)}%` }}
-                        transition={{ type: "spring", bounce: 0.4, delay: i * 0.1 }}
-                        style={{ height: "100%", background: color, borderRadius: 99, position: "relative" }}
-                      >
-                        {/* Inner highlight for 3D effect */}
-                        <div style={{ position: "absolute", top: 2, left: 6, right: 6, height: 4, background: "rgba(255,255,255,0.3)", borderRadius: 99 }} />
-                      </motion.div>
-                    </div>
+                  <div style={{ height: 6, background: "rgba(255,255,255,0.1)", borderRadius: 4, overflow: "hidden" }}>
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${Math.min(pct, 100)}%` }}
+                      transition={{ type: "spring", bounce: 0, delay: i * 0.1 }}
+                      style={{ height: "100%", background: color, borderRadius: 4 }}
+                    />
                   </div>
                 </div>
               );
             })}
           </div>
         </motion.div>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
-        {/* Spending by Category (Donut Chart) */}
-        <motion.div variants={item} className="bubbly-card" style={{ padding: "24px 24px 16px" }}>
-          <h3 className="bubbly-text" style={{ fontSize: 20, marginBottom: 24 }}>Loot Distribution ⚔️</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie
-                data={spending}
-                cx="50%"
-                cy="50%"
-                innerRadius={65}
-                outerRadius={95}
-                paddingAngle={4}
-                dataKey="total"
-                stroke="none"
-              >
-                {spending.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
-                ))}
-              </Pie>
-              <Tooltip content={<ChartTip />} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: 16 }}>
-            {spending.slice(0, 6).map((s, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ width: 12, height: 12, borderRadius: "50%", background: PALETTE[i % PALETTE.length] }} />
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-secondary)", textTransform: "capitalize" }}>{s.category}</span>
-                </div>
-                <span style={{ fontSize: 14, fontWeight: 800, color: "var(--text-primary)" }}>${Number(s.total).toLocaleString()}</span>
-              </div>
-            ))}
-          </div>
-        </motion.div>
 
         {/* Activity Feed */}
-        <motion.div variants={item} className="bubbly-card" style={{ padding: 24 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-            <h3 className="bubbly-text" style={{ fontSize: 20 }}>Activity Feed 📜</h3>
-          </div>
+        <motion.div variants={item} className="glass-panel" style={{ padding: 24 }}>
+          <h3 className="sleek-text" style={{ fontSize: 18, marginBottom: 24 }}>Recent Transactions</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {txns.slice(0, 5).map((tx, i) => (
-              <motion.div key={tx.id} initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.2 + i * 0.1 }}
+            {txns.slice(0, 7).map((tx, i) => (
+              <motion.div key={tx.id} initial={{ x: -10, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.1 + i * 0.05 }}
                 style={{ 
                   display: "flex", alignItems: "center", justifyContent: "space-between", 
-                  padding: "16px", borderRadius: 16, background: "#f8f8fb",
-                  border: "2px solid #f0f0f5"
+                  padding: "12px 16px", borderRadius: 8, background: "rgba(255,255,255,0.02)",
+                  border: "1px solid rgba(255,255,255,0.05)"
                 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                  <div style={{ fontSize: 24, width: 44, height: 44, background: "white", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.05)" }}>
-                    {CATEGORY_EMOJIS[tx.category] || "🛍️"}
-                  </div>
-                  <div>
-                    <p style={{ fontWeight: 800, color: "var(--text-primary)", fontSize: 15 }}>{tx.merchant}</p>
-                    <p style={{ fontWeight: 600, color: "var(--text-secondary)", fontSize: 12, textTransform: "capitalize" }}>{tx.category}</p>
-                  </div>
+                <div>
+                  <p style={{ color: "var(--text-primary)", fontSize: 14, fontWeight: 500 }}>{tx.merchant}</p>
+                  <p style={{ color: "var(--text-secondary)", fontSize: 12, textTransform: "capitalize" }}>{tx.category} • {new Date(tx.timestamp).toLocaleDateString()}</p>
                 </div>
                 <div style={{ 
-                  fontWeight: 800, fontSize: 16,
-                  color: tx.amount > 0 ? "var(--brand-green)" : "var(--text-primary)" 
+                  fontSize: 14, fontWeight: 500,
+                  color: tx.amount > 0 ? "var(--brand-success)" : "var(--text-primary)" 
                 }}>
                   {tx.amount > 0 ? "+" : ""}${Math.abs(tx.amount).toFixed(2)}
                 </div>

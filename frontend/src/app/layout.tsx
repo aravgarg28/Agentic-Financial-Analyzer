@@ -1,31 +1,29 @@
 import type { Metadata } from "next";
-import { Fredoka, Nunito } from "next/font/google";
+import { Playfair_Display, DM_Sans } from "next/font/google";
 import "./globals.css";
 
-const fredoka = Fredoka({
+const playfair = Playfair_Display({
   subsets: ["latin"],
-  variable: "--font-fredoka",
+  variable: "--font-heading",
   display: "swap",
-  weight: ["400", "500", "600", "700"],
 });
 
-const nunito = Nunito({
+const dmSans = DM_Sans({
   subsets: ["latin"],
-  variable: "--font-nunito",
+  variable: "--font-body",
   display: "swap",
-  weight: ["400", "500", "600", "700", "800"],
 });
 
 export const metadata: Metadata = {
-  title: "Finlytics — Playful Financial Analyzer",
-  description: "Track your finances with a fun, gamified dashboard.",
+  title: "Finlytics — Intelligent Wealth Analytics",
+  description: "Next-generation financial intelligence platform.",
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${fredoka.variable} ${nunito.variable}`}>
+    <html lang="en" className={`${playfair.variable} ${dmSans.variable}`}>
       <body>{children}</body>
     </html>
   );

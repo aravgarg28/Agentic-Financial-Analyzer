@@ -15,6 +15,7 @@ load_dotenv(dotenv_path="../.env")
 
 from app.routes.query import router as query_router
 from app.routes.analytics import router as analytics_router
+from app.routes.auth import router as auth_router
 from app.database import engine, Base
 from app.models import Transaction  # noqa: F401 — registers model with Base
 
@@ -93,6 +94,7 @@ app.add_middleware(RateLimitMiddleware, max_requests=30, window_seconds=60)
 # Register routers
 app.include_router(query_router)
 app.include_router(analytics_router)
+app.include_router(auth_router)
 
 
 @app.get("/")
