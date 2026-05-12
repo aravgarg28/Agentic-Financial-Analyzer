@@ -51,7 +51,7 @@ docker-compose up -d
 ```bash
 docker compose exec backend python -m app.seed
 ```
-
+ 
 ### 4. Start the frontend
 ```bash
 cd frontend
