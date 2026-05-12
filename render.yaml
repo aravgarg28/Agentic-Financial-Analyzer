@@ -35,10 +35,7 @@ services:
     plan: free
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        fromService:
-          type: web
-          name: agentic-financial-backend
-          property: url
+        sync: false # Render will prompt you for this. Paste the backend URL once it's created.
 
 databases:
   - name: financial-db
