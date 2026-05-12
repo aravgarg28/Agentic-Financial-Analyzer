@@ -17,6 +17,8 @@ redis = {version = "*", extras = ["hiredis"]}
 langchain = "*"
 langchain-core = "*"
 langchain-groq = "*"
+langchain-community = "*"
+pgvector = "*"
 python-dotenv = "*"
 httpx = "*"
 pydantic = "*"

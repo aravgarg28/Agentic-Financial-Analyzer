@@ -27,8 +27,8 @@
   --glass-border: 1px solid rgba(255, 255, 255, 0.04);
   
   /* Fonts */
-  --font-heading: var(--font-heading), serif;
-  --font-body: var(--font-body), sans-serif;
+  --font-heading: var(--font-bropella), serif;
+  --font-body: var(--font-bropella), serif;
 }
 
 @theme inline {

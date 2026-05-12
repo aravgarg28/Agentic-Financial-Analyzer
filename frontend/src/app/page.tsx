@@ -106,9 +106,9 @@ export default function Home() {
                 <LogoIcon size={32} color="var(--brand-accent)" />
                 <span className="sleek-text" style={{ fontSize: 20, letterSpacing: "4px", textTransform: "uppercase", fontWeight: 500 }}>Finlytics</span>
               </div>
-              <h1 className="sleek-text" style={{ fontSize: 72, fontWeight: 300, marginBottom: 24, lineHeight: 1.1 }}>
+              <h1 className="sleek-text" style={{ fontSize: 72, marginBottom: 24, lineHeight: 1.1 }}>
                 Intelligence for <br/>
-                <span style={{ fontWeight: 400, color: "var(--brand-accent)" }}>Your Wealth.</span>
+                <span style={{ color: "var(--brand-accent)" }}>Your Wealth.</span>
               </h1>
               <p style={{ color: "var(--text-secondary)", fontSize: 20, maxWidth: 460, lineHeight: 1.6 }}>
                 A sophisticated, AI-driven financial platform that adapts to your portfolio. Experience private-banking level insights with absolute clarity.
@@ -162,7 +162,7 @@ export default function Home() {
                 <LogoIcon size={120} color="var(--brand-accent)" />
               </div>
               <div style={{ flex: 1 }}>
-                <h2 className="sleek-text" style={{ fontSize: 40, marginBottom: 24, fontWeight: 300 }}>
+                <h2 className="sleek-text" style={{ fontSize: 40, marginBottom: 24 }}>
                   <span style={{ color: "var(--brand-accent)" }}>01.</span> Unprecedented Clarity
                 </h2>
                 <p style={{ fontSize: 18, color: "var(--text-secondary)", lineHeight: 1.7 }}>
@@ -178,7 +178,7 @@ export default function Home() {
                  </div>
               </div>
               <div style={{ flex: 1 }}>
-                <h2 className="sleek-text" style={{ fontSize: 40, marginBottom: 24, fontWeight: 300 }}>
+                <h2 className="sleek-text" style={{ fontSize: 40, marginBottom: 24 }}>
                   <span style={{ color: "var(--brand-accent)" }}>02.</span> Autonomous Intelligence
                 </h2>
                 <p style={{ fontSize: 18, color: "var(--text-secondary)", lineHeight: 1.7 }}>
