@@ -1,0 +1,47 @@
+version: "1"
+
+services:
+  - type: redis
+    name: financial-redis
+    ipAllowList: [] # Ensures security by keeping cache strictly internal
+    plan: free
+
+  - type: web
+    name: agentic-financial-backend
+    env: python
+    rootDir: backend
+    buildCommand: "pip install poetry && poetry install"
+    startCommand: "poetry run uvicorn main:app --host 0.0.0.0 --port $PORT"
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: financial-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: financial-redis
+          property: connectionString
+      - key: GROQ_API_KEY
+        sync: false # Render will prompt you for this securely
+
+  - type: web
+    name: agentic-financial-frontend
+    env: node
+    rootDir: frontend
+    buildCommand: "npm ci && npm run build"
+    startCommand: "npm start"
+    plan: free
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: agentic-financial-backend
+          property: url
+
+databases:
+  - name: financial-db
+    databaseName: financial_db
+    user: db_user
+    plan: free
