@@ -36,10 +36,19 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+# E501 (line length) is left to formatting, not linting — SQL literals run long.
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# These modules intentionally call load_dotenv() before importing app modules
+# so environment is populated first; E402 is expected here.
+"main.py" = ["E402"]
+"app/config.py" = ["E402"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.mypy]
 python_version = "3.11"
