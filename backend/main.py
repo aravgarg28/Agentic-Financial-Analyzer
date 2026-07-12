@@ -13,11 +13,20 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 load_dotenv(dotenv_path="../.env")
 
+from app.config import settings
 from app.database import Base, engine
 from app.models import Transaction  # noqa: F401 — registers model with Base
+from app.observability import (
+    ObservabilityMiddleware,
+    configure_logging,
+    install_exception_handlers,
+)
 from app.routes.analytics import router as analytics_router
 from app.routes.auth import router as auth_router
 from app.routes.query import router as query_router
+
+# Structured JSON logging with secret redaction (T-004).
+configure_logging(secrets=[settings.groq_api_key, settings.secret_key])
 
 # ── Rate Limiter Middleware ────────────────────────────────────────────────────
 
@@ -87,8 +96,15 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
-# Rate limiter (30 agent queries per minute per IP)
+# Rate limiter (30 agent queries per minute per IP) — replaced with a shared,
+# proper-429 limiter in T-012.
 app.add_middleware(RateLimitMiddleware, max_requests=30, window_seconds=60)
+
+# Outermost: request id, security headers, access logging (T-004).
+app.add_middleware(ObservabilityMiddleware)
+
+# Sanitized catch-all error responses (no stack traces to clients).
+install_exception_handlers(app)
 
 # Register routers
 app.include_router(query_router)

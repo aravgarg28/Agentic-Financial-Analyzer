@@ -4,6 +4,7 @@ Supports streaming via SSE.
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import AsyncGenerator
 
@@ -13,6 +14,8 @@ from langchain_groq import ChatGroq
 from app.agent.memory import load_memory, save_messages
 from app.agent.tools import ALL_TOOLS
 from app.config import settings
+
+logger = logging.getLogger("app.agent")
 
 # System prompt for the financial analyst persona
 SYSTEM_PROMPT = """You are an expert AI financial analyst assistant. You have access to a user's
@@ -123,5 +126,10 @@ async def run_agent_stream(
         # Hit max iterations
         yield {"event": "answer", "data": "I've reached my reasoning limit. Here's what I found so far based on the tools I used."}
 
-    except Exception as e:
-        yield {"event": "error", "data": str(e)}
+    except Exception:
+        # Log full detail server-side; never stream exception internals to the client.
+        logger.exception("Agent stream failed")
+        yield {
+            "event": "error",
+            "data": "The assistant hit an unexpected error. Please try again.",
+        }
