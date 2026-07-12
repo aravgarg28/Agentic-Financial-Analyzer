@@ -14,8 +14,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 load_dotenv(dotenv_path="../.env")
 
 from app.config import settings
-from app.database import Base, engine
-from app.models import Transaction  # noqa: F401 — registers model with Base
 from app.observability import (
     ObservabilityMiddleware,
     configure_logging,
@@ -64,9 +62,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create tables on startup (idempotent)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Schema is owned by Alembic migrations (T-005); the app no longer creates
+    # tables on startup. Run `alembic upgrade head` before serving.
     yield
 
 
