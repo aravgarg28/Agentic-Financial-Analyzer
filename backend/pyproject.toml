@@ -2,28 +2,45 @@
 name = "backend"
 version = "0.1.0"
 description = "Agentic Financial Analyzer backend"
-authors = ["User <user@example.com>"]
+authors = ["aravgarg28 <reacharavgarg@gmail.com>"]
 package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.11"
-fastapi = "*"
-uvicorn = {version = "*", extras = ["standard"]}
-sqlalchemy = {version = "*", extras = ["asyncio"]}
-asyncpg = "*"
-alembic = "*"
-psycopg2-binary = "*"
-redis = {version = "*", extras = ["hiredis"]}
-langchain = "*"
-langchain-core = "*"
-langchain-groq = "*"
-langchain-community = "*"
-pgvector = "*"
-python-dotenv = "*"
-httpx = "*"
-pydantic = "*"
-pydantic-settings = "*"
+fastapi = "^0.115.6"
+uvicorn = {version = "^0.34.0", extras = ["standard"]}
+sqlalchemy = {version = "^2.0.36", extras = ["asyncio"]}
+asyncpg = "^0.30.0"
+alembic = "^1.14.0"
+redis = {version = "^5.2.1", extras = ["hiredis"]}
+langchain-core = "^0.3.29"
+langchain-groq = "^0.2.3"
+pydantic = "^2.10.4"
+pydantic-settings = "^2.7.1"
+python-dotenv = "^1.0.1"
+httpx = "^0.28.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+pytest-asyncio = "^0.25.2"
+ruff = "^0.9.1"
+mypy = "^1.14.1"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
