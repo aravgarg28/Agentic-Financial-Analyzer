@@ -5,14 +5,13 @@ Each session is keyed by user_id:session_id with a 24-hour TTL.
 from __future__ import annotations
 
 import json
-from typing import Optional
 
 import redis.asyncio as aioredis
-from langchain_core.messages import AIMessage, HumanMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from app.config import settings
 
-_redis: Optional[aioredis.Redis] = None
+_redis: aioredis.Redis | None = None
 TTL_SECONDS = 86400  # 24 hours
 MAX_HISTORY = 20     # keep last 20 messages per session
 

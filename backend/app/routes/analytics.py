@@ -3,10 +3,10 @@
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 import calendar
+from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Query, Body, HTTPException
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy import text
 
@@ -34,7 +34,7 @@ def get_month_range(offset: int):
 async def _q(sql: str, params: dict | None = None) -> list[dict]:
     async with async_session() as session:
         result = await session.execute(text(sql), params or {})
-        return [dict(zip(result.keys(), row)) for row in result.fetchall()]
+        return [dict(zip(result.keys(), row, strict=False)) for row in result.fetchall()]
 
 
 @router.get("/spending-by-category")

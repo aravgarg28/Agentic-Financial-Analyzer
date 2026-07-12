@@ -6,13 +6,11 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
-from typing import Optional
 
 from langchain_core.tools import tool
 from sqlalchemy import text
 
 from app.database import async_session
-
 
 # ── Helper ────────────────────────────────────────────────────────────────────
 
@@ -21,7 +19,7 @@ async def _run_query(sql: str, params: dict | None = None) -> list[dict]:
     async with async_session() as session:
         result = await session.execute(text(sql), params or {})
         columns = result.keys()
-        return [dict(zip(columns, row)) for row in result.fetchall()]
+        return [dict(zip(columns, row, strict=False)) for row in result.fetchall()]
 
 
 # ── Tool 1 — Query Transactions ──────────────────────────────────────────────
@@ -29,10 +27,10 @@ async def _run_query(sql: str, params: dict | None = None) -> list[dict]:
 @tool
 async def query_transactions(
     user_id: str = "user_1",
-    category: Optional[str] = None,
-    merchant: Optional[str] = None,
-    min_amount: Optional[float] = None,
-    max_amount: Optional[float] = None,
+    category: str | None = None,
+    merchant: str | None = None,
+    min_amount: float | None = None,
+    max_amount: float | None = None,
     days: int = 30,
     limit: int = 20,
 ) -> str:

@@ -6,19 +6,18 @@ import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, HTTPException
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
-from dotenv import load_dotenv
 
 load_dotenv(dotenv_path="../.env")
 
-from app.routes.query import router as query_router
+from app.database import Base, engine
+from app.models import Transaction  # noqa: F401 — registers model with Base
 from app.routes.analytics import router as analytics_router
 from app.routes.auth import router as auth_router
-from app.database import engine, Base
-from app.models import Transaction  # noqa: F401 — registers model with Base
-
+from app.routes.query import router as query_router
 
 # ── Rate Limiter Middleware ────────────────────────────────────────────────────
 

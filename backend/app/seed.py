@@ -3,11 +3,12 @@ Seed script — generates 500 realistic financial transactions.
 Run: python -m app.seed
 """
 import asyncio
+import hashlib
 import random
 from datetime import datetime, timedelta
-from app.database import engine, async_session, Base
-from app.models import Transaction, User, Budget
-import hashlib
+
+from app.database import Base, async_session, engine
+from app.models import Budget, Transaction, User
 
 # Realistic merchant names per category
 MERCHANTS = {
@@ -119,7 +120,7 @@ async def seed():
         user = User(
             id="user_1",
             username="player1",
-            password_hash=hashlib.sha256("password".encode()).hexdigest()
+            password_hash=hashlib.sha256(b"password").hexdigest()
         )
         session.add(user)
         

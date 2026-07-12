@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field
-from typing import Optional
 from datetime import datetime
+
+from pydantic import BaseModel, Field
 
 
 class TransactionOut(BaseModel):
@@ -10,7 +10,7 @@ class TransactionOut(BaseModel):
     amount: float
     category: str
     timestamp: datetime
-    description: Optional[str] = None
+    description: str | None = None
 
     class Config:
         from_attributes = True
@@ -20,7 +20,7 @@ class QueryRequest(BaseModel):
     """Payload sent from the frontend chat to the agent."""
     query: str = Field(..., min_length=1, max_length=2000, description="User query (max 2000 chars)")
     user_id: str = Field("user_1", max_length=50)
-    session_id: Optional[str] = Field(None, max_length=100)
+    session_id: str | None = Field(None, max_length=100)
 
 
 class QueryResponse(BaseModel):

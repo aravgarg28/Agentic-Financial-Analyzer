@@ -5,14 +5,14 @@ Supports streaming via SSE.
 from __future__ import annotations
 
 import uuid
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
 
-from app.config import settings
-from app.agent.tools import ALL_TOOLS
 from app.agent.memory import load_memory, save_messages
+from app.agent.tools import ALL_TOOLS
+from app.config import settings
 
 # System prompt for the financial analyst persona
 SYSTEM_PROMPT = """You are an expert AI financial analyst assistant. You have access to a user's

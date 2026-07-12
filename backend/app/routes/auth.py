@@ -1,10 +1,12 @@
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
 import hashlib
 import uuid
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import text
+
 from app.database import async_session
-from app.models import User, Budget
+from app.models import Budget, User
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 

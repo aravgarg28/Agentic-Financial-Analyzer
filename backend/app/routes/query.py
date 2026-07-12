@@ -9,8 +9,8 @@ import uuid
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from app.schemas import QueryRequest
 from app.agent.react_agent import run_agent_stream
+from app.schemas import QueryRequest
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
 
