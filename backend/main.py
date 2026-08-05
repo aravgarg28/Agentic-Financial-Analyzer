@@ -19,9 +19,12 @@ from app.observability import (
     configure_logging,
     install_exception_handlers,
 )
-from app.routes.analytics import router as analytics_router
-from app.routes.auth import router as auth_router
-from app.routes.query import router as query_router
+
+# NOTE (T-006): the legacy prototype routers (auth/analytics/query) depended on
+# the old single-table schema and client-supplied user_id. They are unwired
+# while the canonical schema and session-based stack are rebuilt in R0 (auth
+# T-010/T-011, insights/ledger T-021, agent T-030). Their files remain on disk
+# for reference until their replacements land.
 
 # Structured JSON logging with secret redaction (T-004).
 configure_logging(secrets=[settings.groq_api_key, settings.secret_key])
@@ -103,10 +106,7 @@ app.add_middleware(ObservabilityMiddleware)
 # Sanitized catch-all error responses (no stack traces to clients).
 install_exception_handlers(app)
 
-# Register routers
-app.include_router(query_router)
-app.include_router(analytics_router)
-app.include_router(auth_router)
+# Routers are registered as each module's endpoints are rebuilt in R0.
 
 
 @app.get("/")
