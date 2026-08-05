@@ -1,0 +1,54 @@
+name: Nightly encrypted backup
+
+# Encrypted pg_dump of the production database, uploaded as a retained artifact
+# (T-041, INF-10). Encryption uses only a PUBLIC age key, so CI can never
+# decrypt what it produces. Requires repo Actions secrets:
+#   BACKUP_DATABASE_URL  — Neon libpq connection string (postgresql://…)
+#   AGE_PUBLIC_KEY       — age1… recipient public key
+#
+# NOTE: pushing this file needs a token with the `workflow` scope. If your push
+# is rejected, merge it via the GitHub UI (same as ci.yml on ci-workflow-pending).
+
+on:
+  schedule:
+    - cron: "17 7 * * *" # 07:17 UTC nightly
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install tooling (postgresql-client, zstd, age)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client zstd age
+
+      - name: Dump, compress, and encrypt
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          AGE_PUBLIC_KEY: ${{ secrets.AGE_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BACKUP_DATABASE_URL:-}" ] || [ -z "${AGE_PUBLIC_KEY:-}" ]; then
+            echo "Missing BACKUP_DATABASE_URL or AGE_PUBLIC_KEY secret." >&2
+            exit 1
+          fi
+          STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+          OUT="afa-backup-${STAMP}.dump.zst.age"
+          pg_dump --format=custom "${BACKUP_DATABASE_URL}" \
+            | zstd -19 -T0 \
+            | age -r "${AGE_PUBLIC_KEY}" -o "${OUT}"
+          # Sanity: the artifact must be non-trivial in size.
+          test "$(stat -c%s "${OUT}")" -gt 1024
+          echo "ARTIFACT=${OUT}" >> "$GITHUB_ENV"
+
+      - name: Upload encrypted backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT }}
+          path: ${{ env.ARTIFACT }}
+          retention-days: 14
+          if-no-files-found: error
