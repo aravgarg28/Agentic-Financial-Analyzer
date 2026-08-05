@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   db:
-    image: ankane/pgvector:latest
+    # Plain PostgreSQL — pgvector was never used by any code (INF-07/ADR-07).
+    # citext + gen_random_uuid() (used by migrations) ship with this image.
+    image: postgres:16-alpine
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
@@ -33,7 +35,8 @@ services:
     depends_on:
       - db
       - redis
-    command: poetry run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    # Schema is owned by Alembic (T-005); apply migrations before serving.
+    command: sh -c "poetry run alembic upgrade head && poetry run uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
 
   frontend:
     build: ./frontend
