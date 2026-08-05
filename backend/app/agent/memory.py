@@ -23,8 +23,12 @@ async def get_redis() -> aioredis.Redis:
     return _redis
 
 
-def _key(user_id: str, session_id: str) -> str:
-    return f"chat:{user_id}:{session_id}"
+def conversation_key(household_id: int, conversation_id: str) -> str:
+    """Build the Redis memory key from SERVER-derived values only (AGT-05).
+
+    The household id comes from the session, not the client, so one household
+    can never read or poison another's conversation memory."""
+    return f"chat:{household_id}:{conversation_id}"
 
 
 def _serialize_message(msg: BaseMessage) -> str:
@@ -38,20 +42,16 @@ def _deserialize_message(raw: str) -> BaseMessage:
     return AIMessage(content=data["content"])
 
 
-async def load_memory(user_id: str, session_id: str) -> list[BaseMessage]:
-    """Load chat history for a session from Redis."""
+async def load_memory(key: str) -> list[BaseMessage]:
+    """Load chat history for a conversation key from Redis."""
     r = await get_redis()
-    key = _key(user_id, session_id)
     raw_list = await r.lrange(key, 0, -1)
     return [_deserialize_message(raw) for raw in raw_list]
 
 
-async def save_messages(
-    user_id: str, session_id: str, messages: list[BaseMessage]
-) -> None:
-    """Append new messages to session history and refresh TTL."""
+async def save_messages(key: str, messages: list[BaseMessage]) -> None:
+    """Append new messages to conversation history and refresh TTL."""
     r = await get_redis()
-    key = _key(user_id, session_id)
     pipe = r.pipeline()
     for msg in messages:
         pipe.rpush(key, _serialize_message(msg))
@@ -61,7 +61,7 @@ async def save_messages(
     await pipe.execute()
 
 
-async def clear_memory(user_id: str, session_id: str) -> None:
-    """Clear a session's history."""
+async def clear_memory(key: str) -> None:
+    """Clear a conversation's history."""
     r = await get_redis()
-    await r.delete(_key(user_id, session_id))
+    await r.delete(key)

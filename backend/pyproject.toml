@@ -20,6 +20,8 @@ pydantic = "^2.10.4"
 pydantic-settings = "^2.7.1"
 python-dotenv = "^1.0.1"
 httpx = "^0.28.1"
+argon2-cffi = "^23.1.0"
+email-validator = "^2.2.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.4"
@@ -39,6 +41,18 @@ target-version = "py311"
 select = ["E", "F", "I", "UP", "B"]
 # E501 (line length) is left to formatting, not linting — SQL literals run long.
 ignore = ["E501"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection idiom puts Depends()/Query()/etc. in argument
+# defaults on purpose; these are not the mutable-default trap B008 targets.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Header",
+    "fastapi.Cookie",
+]
 
 [tool.ruff.lint.per-file-ignores]
 # These modules intentionally call load_dotenv() before importing app modules
