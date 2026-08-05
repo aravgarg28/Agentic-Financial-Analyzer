@@ -26,7 +26,7 @@ const PROMPTS = [
   "What's my savings rate this month?",
 ];
 
-export default function ChatPanel({ userId }: { userId: string }) {
+export default function ChatPanel() {
   const [msgs, setMsgs] = useState<Msg[]>([{
     id: "sys",
     role: "system",
@@ -35,7 +35,7 @@ export default function ChatPanel({ userId }: { userId: string }) {
   }]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
-  const [sessionId, setSessionId] = useState<string | undefined>();
+  const [conversationId, setConversationId] = useState<string | undefined>();
   const [activeTools, setActiveTools] = useState<string[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLInputElement>(null);
@@ -57,9 +57,9 @@ export default function ChatPanel({ userId }: { userId: string }) {
     let answer = "";
 
     try {
-      for await (const evt of streamAgentQuery(userId, userMsg.content, sessionId)) {
+      for await (const evt of streamAgentQuery(userMsg.content, conversationId)) {
         const e = evt as AgentEvent;
-        if (e.event === "session")     setSessionId(e.data as string);
+        if (e.event === "conversation") setConversationId(e.data as string);
         if (e.event === "tool_call")   { const d = e.data as { tool: string }; tools.push(d); setActiveTools(p => [...p, d.tool]); }
         if (e.event === "tool_result") setActiveTools(p => p.slice(1));
         if (e.event === "answer")      answer = e.data as string;

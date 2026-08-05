@@ -1,116 +1,152 @@
 /**
  * API client for the Financial Analyzer backend.
+ *
+ * Auth is cookie-based: the backend sets an HttpOnly session cookie on
+ * login/register and resolves the tenant from it. The client therefore sends
+ * NO user_id/household_id — identity is never client-supplied (SEC-01/02).
+ * Every request uses `credentials: "include"` so the cookie rides along, and
+ * mutating requests carry the `X-Requested-With` header the backend's CSRF
+ * guard requires. Money is integer minor units end-to-end (FIN-01).
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-// ── Auth Endpoints ────────────────────────────────────────────────────────────
+const JSON_HEADERS = { "Content-Type": "application/json" };
+// Present on mutating requests; the backend rejects cross-site POSTs lacking it.
+const CSRF_HEADERS = { ...JSON_HEADERS, "X-Requested-With": "XMLHttpRequest" };
 
-export async function loginUser(data: { username: string; password: string }) {
-  const res = await fetch(`${API_URL}/auth/login`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+async function getJson(path: string) {
+  const res = await fetch(`${API_URL}${path}`, { credentials: "include" });
+  if (!res.ok) throw new Error(`Request failed: ${path} (${res.status})`);
+  return res.json();
+}
+
+async function mutate(path: string, method: string, body?: unknown) {
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    headers: CSRF_HEADERS,
+    credentials: "include",
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || "Login failed");
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Request failed: ${path} (${res.status})`);
   }
   return res.json();
 }
 
-export async function registerUser(data: { username: string; password: string }) {
-  const res = await fetch(`${API_URL}/auth/register`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || "Registration failed");
-  }
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+export interface Me {
+  user_public_id: string;
+  email: string;
+  household_public_id: string;
+  role: string;
+}
+
+export async function loginUser(data: { email: string; password: string }) {
+  return mutate("/auth/login", "POST", data);
+}
+
+export async function registerUser(data: { email: string; password: string }) {
+  return mutate("/auth/register", "POST", data);
+}
+
+export async function logoutUser() {
+  return mutate("/auth/logout", "POST");
+}
+
+/** Returns the current profile, or null if not authenticated. */
+export async function fetchMe(): Promise<Me | null> {
+  const res = await fetch(`${API_URL}/auth/me`, { credentials: "include" });
+  if (res.status === 401) return null;
+  if (!res.ok) throw new Error("Failed to fetch profile");
   return res.json();
 }
 
-// ── Analytics REST Endpoints ──────────────────────────────────────────────────
+// ── Insights (dashboard) ────────────────────────────────────────────────────
+// All amounts returned are integer minor units; format with formatMinor().
 
-export async function fetchSpendingByCategory(userId: string, monthOffset = 0) {
-  const res = await fetch(`${API_URL}/analytics/spending-by-category?user_id=${userId}&month_offset=${monthOffset}`);
-  if (!res.ok) throw new Error("Failed to fetch spending data");
-  const json = await res.json();
-  return json.data;
+export async function fetchSpendingByCategory(monthOffset = 0) {
+  return (await getJson(`/insights/spending-by-category?month_offset=${monthOffset}`)).data;
 }
 
-export async function fetchMonthlyTrends(userId: string, months = 6) {
-  const res = await fetch(`${API_URL}/analytics/monthly-trends?user_id=${userId}&months=${months}`);
-  if (!res.ok) throw new Error("Failed to fetch monthly trends");
-  const json = await res.json();
-  return json.data;
+export async function fetchMonthlyTrends(months = 6) {
+  return (await getJson(`/insights/monthly-trends?months=${months}`)).data;
 }
 
-export async function fetchNetWorth(userId: string, monthOffset = 0) {
-  const res = await fetch(`${API_URL}/analytics/net-worth?user_id=${userId}&month_offset=${monthOffset}`);
-  if (!res.ok) throw new Error("Failed to fetch net worth");
-  const json = await res.json();
-  return json.data;
+/** Cash-flow summary for a month (income/expenses/net over the period —
+ * this is a flow, not a net-worth balance; FIN-07). */
+export async function fetchCashFlowSummary(monthOffset = 0) {
+  return getJson(`/insights/cash-flow-summary?month_offset=${monthOffset}`);
 }
 
-export async function fetchTopMerchants(userId: string, monthOffset = 0, limit = 10) {
-  const res = await fetch(`${API_URL}/analytics/top-merchants?user_id=${userId}&month_offset=${monthOffset}&limit=${limit}`);
-  if (!res.ok) throw new Error("Failed to fetch merchants");
-  const json = await res.json();
-  return json.data;
+export async function fetchTopMerchants(monthOffset = 0, limit = 10) {
+  return (await getJson(`/insights/top-merchants?month_offset=${monthOffset}&limit=${limit}`)).data;
 }
 
-export async function fetchBudgetAlerts(userId: string, days = 30) {
-  const res = await fetch(`${API_URL}/analytics/budget-alerts?user_id=${userId}&days=${days}`);
-  if (!res.ok) throw new Error("Failed to fetch budget alerts");
-  const json = await res.json();
-  return json.data;
+export async function fetchBudgetAlerts(monthOffset = 0) {
+  return (await getJson(`/insights/budget-alerts?month_offset=${monthOffset}`)).data;
 }
 
-export async function fetchRecentTransactions(userId: string, limit = 20) {
-  const res = await fetch(`${API_URL}/analytics/recent-transactions?user_id=${userId}&limit=${limit}`);
-  if (!res.ok) throw new Error("Failed to fetch transactions");
-  const json = await res.json();
-  return json.data;
+export async function fetchRecentTransactions(limit = 20) {
+  return (await getJson(`/insights/recent-transactions?limit=${limit}`)).data;
 }
 
-export async function addTransaction(userId: string, data: { merchant: string; amount: number; category: string; description?: string }) {
-  const res = await fetch(`${API_URL}/analytics/transactions?user_id=${userId}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error("Failed to add transaction");
-  return res.json();
+export async function fetchBudgets(month?: string) {
+  const q = month ? `?month=${month}` : "";
+  return (await getJson(`/insights/budgets${q}`)).data;
 }
 
-export async function fetchBudgets(userId: string) {
-  const res = await fetch(`${API_URL}/analytics/budgets?user_id=${userId}`);
-  if (!res.ok) throw new Error("Failed to fetch budgets");
-  const json = await res.json();
-  return json.data;
+export async function upsertBudget(data: {
+  category_id: number;
+  amount_minor: number;
+  month?: string;
+}) {
+  return mutate("/insights/budgets", "PUT", data);
+}
+
+// ── Ledger ────────────────────────────────────────────────────────────────────
+
+export async function fetchAccounts() {
+  return (await getJson("/ledger/accounts")).data;
+}
+
+export async function addTransaction(data: {
+  account_id: string;
+  amount_minor: number;
+  booked_date: string;
+  description?: string;
+  category_id?: number;
+}) {
+  return mutate("/ledger/transactions", "POST", data);
+}
+
+// ── Formatting ──────────────────────────────────────────────────────────────
+
+/** Convert integer minor units to a display string, e.g. -1234 -> "-$12.34". */
+export function formatMinor(minor: number, currency = "USD"): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(
+    minor / 100
+  );
 }
 
 // ── Agent SSE Streaming ───────────────────────────────────────────────────────
 
 export interface AgentEvent {
-  event: "session" | "tool_call" | "tool_result" | "answer" | "error";
+  event: "conversation" | "tool_call" | "tool_result" | "answer" | "error";
   data: string | Record<string, unknown>;
 }
 
 export async function* streamAgentQuery(
-  userId: string,
   query: string,
-  sessionId?: string
+  conversationId?: string
 ): AsyncGenerator<AgentEvent> {
   const res = await fetch(`${API_URL}/agent/query`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      query,
-      user_id: userId,
-      session_id: sessionId || null,
-    }),
+    headers: CSRF_HEADERS,
+    credentials: "include",
+    body: JSON.stringify({ query, conversation_id: conversationId || null }),
   });
 
   if (!res.ok) throw new Error("Agent query failed");
@@ -136,8 +172,7 @@ export async function* streamAgentQuery(
       if (payload === "[DONE]") return;
 
       try {
-        const parsed = JSON.parse(payload) as AgentEvent;
-        yield parsed;
+        yield JSON.parse(payload) as AgentEvent;
       } catch {
         // skip malformed lines
       }

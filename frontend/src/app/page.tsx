@@ -1,9 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import dynamic from "next/dynamic";
-import { addTransaction, loginUser, registerUser } from "@/lib/api";
+import {
+  addTransaction,
+  fetchAccounts,
+  fetchMe,
+  loginUser,
+  logoutUser,
+  registerUser,
+} from "@/lib/api";
 import Hero3DBackground from "@/components/Hero3DBackground";
 import LogoIcon from "@/components/LogoIcon";
 
@@ -23,40 +30,63 @@ const slide = {
 export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
-  const [userId, setUserId] = useState("");
-  const [username, setUsername] = useState("player1");
+  const [email, setEmail] = useState("");
   const [isProfileHovered, setIsProfileHovered] = useState(false);
-  
+
   const [tab, setTab] = useState<Tab>("dashboard");
   const [showAddLog, setShowAddLog] = useState(false);
   const [showBankLink, setShowBankLink] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [formData, setFormData] = useState({ merchant: "", amount: "", category: "food" });
-  const [loginData, setLoginData] = useState({ username: "player1", password: "password" });
+  const [formData, setFormData] = useState({ merchant: "", amount: "" });
+  // Credentials start empty — no defaults are ever prefilled (SEC-06).
+  const [loginData, setLoginData] = useState({ email: "", password: "" });
   const [authError, setAuthError] = useState("");
+
+  // Restore an existing session on load (cookie-based auth).
+  useEffect(() => {
+    fetchMe()
+      .then((me) => {
+        if (me) {
+          setEmail(me.email);
+          setIsLoggedIn(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError("");
     try {
-      let res;
       if (authMode === "login") {
-        res = await loginUser(loginData);
+        await loginUser(loginData);
       } else {
-        res = await registerUser(loginData);
+        await registerUser(loginData);
       }
-      setUserId(res.user_id);
-      setUsername(res.username);
+      const me = await fetchMe();
+      if (!me) {
+        setAuthError(
+          authMode === "register"
+            ? "That email may already be registered. Try signing in."
+            : "Invalid email or password"
+        );
+        return;
+      }
+      setEmail(me.email);
       setIsLoggedIn(true);
-    } catch (err: any) {
-      setAuthError(err.message || "An error occurred");
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : "An error occurred");
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+    } catch {
+      // ignore — clear local state regardless
+    }
     setIsLoggedIn(false);
-    setUserId("");
-    setUsername("");
+    setEmail("");
     setTab("dashboard");
   };
 
@@ -64,15 +94,23 @@ export default function Home() {
     e.preventDefault();
     if (!formData.merchant || !formData.amount) return;
     try {
-      await addTransaction(userId, {
-        merchant: formData.merchant,
-        amount: parseFloat(formData.amount),
-        category: formData.category
+      const accounts = await fetchAccounts();
+      if (!accounts.length) {
+        alert("No account found. Create an account first (seed the demo data).");
+        return;
+      }
+      // Expenses are negative; store as integer minor units (cents).
+      const amountMinor = -Math.round(parseFloat(formData.amount) * 100);
+      await addTransaction({
+        account_id: accounts[0].id,
+        amount_minor: amountMinor,
+        booked_date: new Date().toISOString().slice(0, 10),
+        description: formData.merchant,
       });
       alert("✅ Transaction added! Reload the page to see your new stats.");
       setShowAddLog(false);
-      setFormData({ merchant: "", amount: "", category: "food" });
-    } catch (err) {
+      setFormData({ merchant: "", amount: "" });
+    } catch {
       alert("Error adding transaction. Please try again.");
     }
   };
@@ -121,19 +159,22 @@ export default function Home() {
             </h2>
             
             <form onSubmit={handleAuth} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-              <input 
-                required 
-                value={loginData.username} 
-                onChange={e => setLoginData({...loginData, username: e.target.value})} 
-                placeholder="Username" 
+              <input
+                required
+                type="email"
+                autoComplete="email"
+                value={loginData.email}
+                onChange={e => setLoginData({...loginData, email: e.target.value})}
+                placeholder="Email"
                 className="sleek-input"
               />
-              <input 
-                required 
+              <input
+                required
                 type="password"
-                value={loginData.password} 
-                onChange={e => setLoginData({...loginData, password: e.target.value})} 
-                placeholder="Password" 
+                autoComplete={authMode === "login" ? "current-password" : "new-password"}
+                value={loginData.password}
+                onChange={e => setLoginData({...loginData, password: e.target.value})}
+                placeholder="Password (min 10 characters)"
                 className="sleek-input"
               />
               {authError && <p style={{ color: "var(--brand-error)", fontSize: 14 }}>{authError}</p>}
@@ -223,21 +264,8 @@ export default function Home() {
                   <input required value={formData.merchant} onChange={e => setFormData({ ...formData, merchant: e.target.value })} className="sleek-input" style={{ width: "100%" }} placeholder="e.g. Starbucks" />
                 </div>
                 <div>
-                  <label style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: "0.05em" }}>Amount ($)</label>
-                  <input required type="number" step="0.01" value={formData.amount} onChange={e => setFormData({ ...formData, amount: e.target.value })} className="sleek-input" style={{ width: "100%" }} placeholder="e.g. 5.50" />
-                </div>
-                <div>
-                  <label style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: "0.05em" }}>Category</label>
-                  <select value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })} className="sleek-input" style={{ width: "100%" }}>
-                    <option value="food">Food</option>
-                    <option value="transport">Transport</option>
-                    <option value="shopping">Shopping</option>
-                    <option value="utilities">Utilities</option>
-                    <option value="entertainment">Entertainment</option>
-                    <option value="health">Health</option>
-                    <option value="travel">Travel</option>
-                    <option value="income">Income</option>
-                  </select>
+                  <label style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, display: "block", textTransform: "uppercase", letterSpacing: "0.05em" }}>Amount ($ spent)</label>
+                  <input required type="number" step="0.01" min="0" value={formData.amount} onChange={e => setFormData({ ...formData, amount: e.target.value })} className="sleek-input" style={{ width: "100%" }} placeholder="e.g. 5.50" />
                 </div>
                 <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
                   <button type="button" className="sleek-button secondary" onClick={() => setShowAddLog(false)} style={{ flex: 1 }}>Cancel</button>
@@ -401,7 +429,7 @@ export default function Home() {
                 <div style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--bg-sidebar)" }} />
               </div>
               <div>
-                <p className="sleek-text" style={{ fontSize: 14 }}>{username}</p>
+                <p className="sleek-text" style={{ fontSize: 14 }}>{email}</p>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
                   <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--brand-success)", boxShadow: "0 0 8px var(--brand-success)" }} />
                   <span style={{ fontSize: 11, color: "var(--text-sidebar)" }}>Secure Session</span>
@@ -457,7 +485,7 @@ export default function Home() {
                 exit="exit"
                 style={{ height: "100%", overflowY: "auto", padding: "8px 16px 48px" }}
               >
-                <DashboardCharts userId={userId} />
+                <DashboardCharts />
               </motion.div>
             ) : (
               <motion.div
@@ -468,7 +496,7 @@ export default function Home() {
                 exit="exit"
                 style={{ height: "100%", padding: "0 16px" }}
               >
-                <ChatPanel userId={userId} />
+                <ChatPanel />
               </motion.div>
             )}
           </AnimatePresence>
