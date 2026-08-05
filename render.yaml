@@ -1,44 +1,50 @@
 version: "1"
 
-services:
-  - type: redis
-    name: financial-redis
-    ipAllowList: [] # Ensures security by keeping cache strictly internal
-    plan: free
+# Free-tier deployment (T-040, D6/D8). Datastores are EXTERNAL and persistent:
+# Neon (Postgres) and Upstash (Redis). Render's own free Postgres is deliberately
+# NOT used — it expires after 90 days (banned by the zero-budget durability rule).
+# Provide the TLS connection URLs as secrets in the Render dashboard (sync:false).
+# Full runbook: docs/ops/deploy.md.
 
+services:
   - type: web
     name: agentic-financial-backend
     env: python
     rootDir: backend
-    buildCommand: "pip install poetry && poetry install"
-    startCommand: "poetry run uvicorn main:app --host 0.0.0.0 --port $PORT"
     plan: free
+    buildCommand: "pip install poetry && poetry install --only main"
+    # Apply migrations, then serve. Schema is owned by Alembic (T-005).
+    startCommand: "poetry run alembic upgrade head && poetry run uvicorn main:app --host 0.0.0.0 --port $PORT"
     envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: financial-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: financial-redis
-          property: connectionString
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL           # Neon pooled connection string (asyncpg)
+        sync: false
+      - key: REDIS_URL              # Upstash rediss:// URL
+        sync: false
       - key: GROQ_API_KEY
-        sync: false # Render will prompt you for this securely
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FRONTEND_ORIGIN        # e.g. https://agentic-financial-frontend.onrender.com
+        sync: false
+      - key: COOKIE_SECURE
+        value: "true"
+      # COOKIE_DOMAIN: set only if backend/frontend share a parent domain.
 
   - type: web
     name: agentic-financial-frontend
     env: node
     rootDir: frontend
+    plan: free
+    # NEXT_PUBLIC_* is inlined at BUILD time (INF-08), so it must be present as a
+    # build env var — Render exposes envVars to the build. Point it at the
+    # backend's public URL.
     buildCommand: "npm ci && npm run build"
     startCommand: "npm start"
-    plan: free
     envVars:
-      - key: NEXT_PUBLIC_API_URL
-        sync: false # Render will prompt you for this. Paste the backend URL once it's created.
+      - key: NEXT_PUBLIC_API_URL    # e.g. https://agentic-financial-backend.onrender.com
+        sync: false
 
-databases:
-  - name: financial-db
-    databaseName: financial_db
-    user: db_user
-    plan: free
+# A background worker (Postgres-backed job queue) is added here in R2 (ADR-05);
+# it will reuse the backend image with a worker start command. See deploy.md.
