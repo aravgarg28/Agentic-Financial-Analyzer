@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: financial_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/financial_test
+      TEST_DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/financial_test
+      REDIS_URL: redis://localhost:6379
+      GROQ_API_KEY: test-key-not-used-in-tests
+      ENVIRONMENT: test
+      RUN_MIGRATION_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Poetry
+        run: pipx install poetry==2.4.1
+      - name: Cache Poetry venv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry/virtualenvs
+          key: poetry-${{ runner.os }}-${{ hashFiles('backend/poetry.lock') }}
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-ansi
+      - name: Ruff (lint) — blocking
+        run: poetry run ruff check .
+      - name: Mypy (types) — permissive
+        run: poetry run mypy app main.py || true
+      - name: Pytest
+        run: poetry run pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks (secret scan) — blocking
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/repo" \
+            ghcr.io/gitleaks/gitleaks:v8.21.2 detect \
+            --source /repo --redact --verbose
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: pip-audit — advisory
+        working-directory: backend
+        run: |
+          pipx install poetry==2.4.1
+          poetry export -f requirements.txt --output /tmp/reqs.txt --without-hashes 2>/dev/null \
+            || poetry run pip freeze > /tmp/reqs.txt
+          pipx run pip-audit -r /tmp/reqs.txt || true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: npm audit — advisory
+        working-directory: frontend
+        run: npm audit --audit-level=high || true
