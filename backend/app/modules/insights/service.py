@@ -68,7 +68,10 @@ async def spending_by_category(
             Transaction.booked_date >= first,
             Transaction.booked_date <= last,
         )
-        .group_by(func.coalesce(Category.name, UNCATEGORIZED))
+        # Group by the bare column (NULLs collapse into one group); the SELECT
+        # coalesce is then well-defined per group. Grouping by the coalesce
+        # expression itself trips Postgres (parameterized const in GROUP BY).
+        .group_by(Category.name)
         .order_by(func.sum(func.abs(Transaction.amount_minor)).desc())
     )
     rows = (await session.execute(stmt)).all()

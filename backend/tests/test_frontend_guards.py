@@ -23,6 +23,17 @@ def test_login_form_has_no_prefilled_credentials():
     assert 'useState({ email: "", password: "" })' in page
 
 
+def test_seed_demo_email_is_api_loginable():
+    """The demo user's email must pass the same EmailStr validation the login
+    endpoint enforces — otherwise the seed creates a user that can never log in
+    through the API (reserved TLDs like .local are rejected)."""
+    from app.modules.identity.schemas import LoginInput
+    from scripts.seed_demo import DEMO_EMAIL
+
+    # Raises ValidationError if the domain is reserved/invalid.
+    LoginInput(email=DEMO_EMAIL, password="x")
+
+
 def test_api_client_sends_no_client_identity():
     api = _read("lib/api.ts")
     # No identity is sent as a query param or JSON key (comments may mention

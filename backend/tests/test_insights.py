@@ -99,6 +99,35 @@ async def test_money_is_integer_minor_units_end_to_end(seed_session):
         assert body["amount_minor"] == -12345 and isinstance(body["amount_minor"], int)
 
 
+async def test_spending_by_category_groups_including_uncategorized(seed_session):
+    """spending-by-category must aggregate without a 500, including when some
+    transactions have no category (NULL category_id). Regression: grouping by a
+    parameterized coalesce() tripped Postgres' GROUP BY validation."""
+    _, mem = await make_household(seed_session, "spend@example.com")
+    acct = await add_account(seed_session, mem.household_id)
+    cat = await add_category(seed_session, mem.household_id, "Groceries")
+    this_first, _, _ = month_bounds("America/New_York", 0)
+
+    await add_transaction(
+        seed_session, household_id=mem.household_id, account_id=acct.id,
+        amount_minor=-3000, booked_date=this_first, description="market",
+        category_id=cat.id,
+    )
+    # No category → falls into the "Uncategorized" bucket.
+    await add_transaction(
+        seed_session, household_id=mem.household_id, account_id=acct.id,
+        amount_minor=-1500, booked_date=this_first, description="misc",
+    )
+    await seed_session.commit()
+
+    async with _login("spend@example.com") as c:
+        r = await c.get("/insights/spending-by-category")
+        assert r.status_code == 200
+        data = {row["category"]: row["total_minor"] for row in r.json()["data"]}
+    assert data["Groceries"] == 3000
+    assert data["Uncategorized"] == 1500
+
+
 async def test_manual_transaction_is_idempotent(seed_session):
     """FIN-05: re-posting the same transaction dedups instead of duplicating."""
     _, mem = await make_household(seed_session, "dedup@example.com")

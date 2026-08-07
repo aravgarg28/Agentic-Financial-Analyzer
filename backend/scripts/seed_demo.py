@@ -29,7 +29,11 @@ from app.modules.identity.models import User
 from app.modules.ledger.models import Account, Category
 from app.modules.ledger.service import compute_fingerprint, normalize_description
 
-DEMO_EMAIL = "demo@demo.local"
+# Uses example.com — the IANA-reserved documentation domain. Note: reserved
+# TLDs like .local/.test/.invalid are rejected by the API's email validator, so
+# a demo user created with one of those could never log in (regression guard:
+# test_seed_demo_email_is_api_loginable).
+DEMO_EMAIL = "demo@example.com"
 
 # (category name, type, [merchant samples], typical spend range in minor units)
 CATEGORIES: list[tuple[str, str, list[str], tuple[int, int]]] = [
