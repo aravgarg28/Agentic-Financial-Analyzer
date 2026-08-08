@@ -35,8 +35,6 @@ export default function Home() {
 
   const [tab, setTab] = useState<Tab>("dashboard");
   const [showAddLog, setShowAddLog] = useState(false);
-  const [showBankLink, setShowBankLink] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [formData, setFormData] = useState({ merchant: "", amount: "" });
   // Credentials start empty — no defaults are ever prefilled (SEC-06).
   const [loginData, setLoginData] = useState({ email: "", password: "" });
@@ -115,15 +113,6 @@ export default function Home() {
     }
   };
 
-  const handleLinkBank = () => {
-    setIsSyncing(true);
-    setTimeout(() => {
-      setIsSyncing(false);
-      setShowBankLink(false);
-      alert("✅ Successfully synced 42 new transactions from Chase Bank via Plaid Sandbox!");
-    }, 2000);
-  };
-
   if (!isLoggedIn) {
     return (
       <div style={{ background: "var(--bg-app)", minHeight: "100vh", width: "100vw", overflowX: "hidden" }}>
@@ -149,7 +138,7 @@ export default function Home() {
                 <span style={{ color: "var(--brand-accent)" }}>Your Wealth.</span>
               </h1>
               <p style={{ color: "var(--text-secondary)", fontSize: 20, maxWidth: 460, lineHeight: 1.6 }}>
-                A sophisticated, AI-driven financial platform that adapts to your portfolio. Experience private-banking level insights with absolute clarity.
+                A private, self-hosted way to track your spending and ask questions about it. Add transactions, see clear monthly breakdowns, and chat with an AI assistant grounded in your own data.
               </p>
             </div>
 
@@ -204,10 +193,10 @@ export default function Home() {
               </div>
               <div style={{ flex: 1 }}>
                 <h2 className="sleek-text" style={{ fontSize: 40, marginBottom: 24 }}>
-                  <span style={{ color: "var(--brand-accent)" }}>01.</span> Unprecedented Clarity
+                  <span style={{ color: "var(--brand-accent)" }}>01.</span> Clear monthly breakdowns
                 </h2>
                 <p style={{ fontSize: 18, color: "var(--text-secondary)", lineHeight: 1.7 }}>
-                  Our proprietary engine strips away the noise. By combining real-time ledger sync with beautiful, instantaneous WebGL visualizations, you see exactly where your capital is flowing at any given millisecond.
+                  See spending by category, income vs. expenses, and net cash flow for each calendar month. Set simple per-category budgets and track how the current month compares. Add transactions manually today; CSV import is planned.
                 </p>
               </div>
             </div>
@@ -220,10 +209,10 @@ export default function Home() {
               </div>
               <div style={{ flex: 1 }}>
                 <h2 className="sleek-text" style={{ fontSize: 40, marginBottom: 24 }}>
-                  <span style={{ color: "var(--brand-accent)" }}>02.</span> Autonomous Intelligence
+                  <span style={{ color: "var(--brand-accent)" }}>02.</span> Ask questions about your money
                 </h2>
                 <p style={{ fontSize: 18, color: "var(--text-secondary)", lineHeight: 1.7 }}>
-                  Forget manual categorization. Your personal AI agent continuously analyzes transaction streams, flags anomalies, and dynamically rebalances your predictive budget targets, allowing you to remain completely hands-off.
+                  Chat with an AI assistant that reads only your own transactions to answer questions like &ldquo;where did I overspend last month?&rdquo; It can look things up but never moves money or changes your data. Answers are in beta &mdash; check the figures against the dashboard.
                 </p>
               </div>
             </div>
@@ -272,50 +261,6 @@ export default function Home() {
                   <button type="submit" className="sleek-button primary" style={{ flex: 1 }}>Save Log</button>
                 </div>
               </form>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Link Bank (Plaid) Modal ── */}
-      <AnimatePresence>
-        {showBankLink && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}
-          >
-            <motion.div 
-              initial={{ scale: 0.9, y: 20, filter: "blur(4px)" }}
-              animate={{ scale: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ scale: 0.95, y: 10, filter: "blur(4px)", transition: { duration: 0.15 } }}
-              transition={{ type: "spring", duration: 0.5, bounce: 0.4 }}
-              className="glass-panel" style={{ padding: 40, width: 400, textAlign: "center" }}
-            >
-              <h2 className="sleek-text" style={{ fontSize: 24, marginBottom: 8 }}>Link Bank</h2>
-              <p style={{ color: "var(--text-secondary)", marginBottom: 32, fontSize: 14 }}>Secure connection via Plaid</p>
-              
-              {isSyncing ? (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: 40 }}>
-                  <div style={{ width: 40, height: 40, border: "2px solid var(--text-secondary)", borderTopColor: "var(--brand-accent)", borderRadius: "50%", margin: "0 auto 16px", animation: "spin 1s linear infinite" }} />
-                  <p style={{ color: "var(--text-primary)" }}>Syncing data...</p>
-                  <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
-                </motion.div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <button onClick={handleLinkBank} className="sleek-button secondary" style={{ padding: "16px 20px", display: "flex", justifyContent: "space-between" }}>
-                    <span>Chase</span> <span>→</span>
-                  </button>
-                  <button onClick={handleLinkBank} className="sleek-button secondary" style={{ padding: "16px 20px", display: "flex", justifyContent: "space-between" }}>
-                    <span>Bank of America</span> <span>→</span>
-                  </button>
-                  <button onClick={handleLinkBank} className="sleek-button secondary" style={{ padding: "16px 20px", display: "flex", justifyContent: "space-between" }}>
-                    <span>Wells Fargo</span> <span>→</span>
-                  </button>
-                  <button type="button" className="sleek-button" onClick={() => setShowBankLink(false)} style={{ marginTop: 16 }}>Cancel</button>
-                </div>
-              )}
             </motion.div>
           </motion.div>
         )}
@@ -452,20 +397,8 @@ export default function Home() {
             {tab === "dashboard" ? "Overview" : "Intelligence"}
           </h2>
           <div style={{ display: "flex", gap: 12 }}>
-            <button 
-              className="sleek-button secondary" 
-              onClick={() => alert("No new notifications at this time.")}
-            >
-              Alerts
-            </button>
-            <button 
-              className="sleek-button secondary" 
-              onClick={() => setShowBankLink(true)}
-            >
-              Link Bank
-            </button>
-            <button 
-              className="sleek-button primary" 
+            <button
+              className="sleek-button primary"
               onClick={() => setShowAddLog(true)}
             >
               Add Entry
