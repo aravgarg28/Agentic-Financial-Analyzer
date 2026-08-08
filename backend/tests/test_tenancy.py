@@ -45,6 +45,12 @@ AUTHENTICATED_ROUTES = {
     ("PUT", "/insights/budgets"),
     ("GET", "/insights/budget-alerts"),
     ("GET", "/ledger/accounts"),
+    ("POST", "/ledger/accounts"),
+    ("PATCH", "/ledger/accounts/{public_id}"),
+    ("POST", "/ledger/accounts/{public_id}/archive"),
+    ("POST", "/ledger/accounts/{public_id}/unarchive"),
+    ("GET", "/ledger/institutions"),
+    ("POST", "/ledger/institutions"),
     ("POST", "/ledger/transactions"),
     ("POST", "/agent/query"),
 }

@@ -29,10 +29,37 @@ from app.modules._columns import created_at, deleted_at, id_pk, public_uuid, upd
 _ACCOUNT_TYPES = "'checking', 'savings', 'credit_card', 'loan', 'investment', 'property', 'cash', 'other'"
 
 
+class Institution(Base):
+    """A user-labeled financial institution (T-060). connection_id / aggregator
+    linkage arrives in R2; for now this is a simple household-scoped label that
+    accounts and (later) saved CSV mappings hang off of."""
+
+    __tablename__ = "institutions"
+
+    id: Mapped[int] = id_pk()
+    household_id: Mapped[int] = mapped_column(
+        ForeignKey("households.id", ondelete="CASCADE"), nullable=False
+    )
+    public_id: Mapped[str] = public_uuid()
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    # kind is a free label (e.g. 'bank', 'credit_union', 'card_issuer'); not a
+    # closed enum because users name their own institutions.
+    kind: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    logo_ref: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    aggregator_institution_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = created_at()
+    deleted_at: Mapped[datetime | None] = deleted_at()
+
+    __table_args__ = (
+        Index("ix_institutions_household", "household_id"),
+        UniqueConstraint("household_id", "name", name="uq_institutions_scope_name"),
+    )
+
+
 class Account(Base):
     """A bank/credit account (full transactions) or a balance-only container.
 
-    institution_id and connection_id are added in R1/R2 when those tables land.
+    connection_id (aggregator link) is added in R2 when that table lands.
     """
 
     __tablename__ = "accounts"
@@ -40,6 +67,12 @@ class Account(Base):
     id: Mapped[int] = id_pk()
     household_id: Mapped[int] = mapped_column(
         ForeignKey("households.id", ondelete="CASCADE"), nullable=False
+    )
+    institution_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "institutions.id", ondelete="SET NULL", name="fk_accounts_institution_id"
+        ),
+        nullable=True,
     )
     public_id: Mapped[str] = public_uuid()
     name: Mapped[str] = mapped_column(String(120), nullable=False)
