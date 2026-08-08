@@ -106,10 +106,81 @@ export async function upsertBudget(data: {
   return mutate("/insights/budgets", "PUT", data);
 }
 
-// ── Ledger ────────────────────────────────────────────────────────────────────
+// ── Ledger: accounts & institutions (T-060) ──────────────────────────────────
 
-export async function fetchAccounts() {
-  return (await getJson("/ledger/accounts")).data;
+export interface Account {
+  id: string;
+  name: string;
+  type: string;
+  tracking_mode: string;
+  currency: string;
+  current_balance_minor: number | null;
+  archived: boolean;
+  institution: { id: string; name: string } | null;
+}
+
+export interface Institution {
+  id: string;
+  name: string;
+  kind: string | null;
+}
+
+export const ACCOUNT_TYPES = [
+  "checking",
+  "savings",
+  "credit_card",
+  "loan",
+  "investment",
+  "property",
+  "cash",
+  "other",
+] as const;
+
+export async function fetchAccounts(includeArchived = false): Promise<Account[]> {
+  const q = includeArchived ? "?include_archived=true" : "";
+  return (await getJson(`/ledger/accounts${q}`)).data;
+}
+
+export async function createAccount(data: {
+  name: string;
+  type: string;
+  tracking_mode?: string;
+  currency?: string;
+  institution_id?: string | null;
+  opening_balance_minor?: number | null;
+}): Promise<Account> {
+  return mutate("/ledger/accounts", "POST", data);
+}
+
+export async function updateAccount(
+  publicId: string,
+  data: {
+    name?: string;
+    institution_id?: string | null;
+    clear_institution?: boolean;
+    current_balance_minor?: number | null;
+  }
+): Promise<Account> {
+  return mutate(`/ledger/accounts/${publicId}`, "PATCH", data);
+}
+
+export async function archiveAccount(publicId: string): Promise<Account> {
+  return mutate(`/ledger/accounts/${publicId}/archive`, "POST");
+}
+
+export async function unarchiveAccount(publicId: string): Promise<Account> {
+  return mutate(`/ledger/accounts/${publicId}/unarchive`, "POST");
+}
+
+export async function fetchInstitutions(): Promise<Institution[]> {
+  return (await getJson("/ledger/institutions")).data;
+}
+
+export async function createInstitution(data: {
+  name: string;
+  kind?: string | null;
+}): Promise<Institution> {
+  return mutate("/ledger/institutions", "POST", data);
 }
 
 export async function addTransaction(data: {

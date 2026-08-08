@@ -16,8 +16,9 @@ import LogoIcon from "@/components/LogoIcon";
 
 const ChatPanel = dynamic(() => import("@/components/ChatPanel"), { ssr: false });
 const DashboardCharts = dynamic(() => import("@/components/DashboardCharts"), { ssr: false });
+const AccountsPanel = dynamic(() => import("@/components/AccountsPanel"), { ssr: false });
 
-type Tab = "dashboard" | "chat";
+type Tab = "dashboard" | "accounts" | "chat";
 
 const slide = {
   enter: { opacity: 0, scale: 0.95, y: 20 },
@@ -294,7 +295,7 @@ export default function Home() {
             Overview
           </p>
           
-          {(["dashboard", "chat"] as Tab[]).map((t) => {
+          {(["dashboard", "accounts", "chat"] as Tab[]).map((t) => {
             const isActive = tab === t;
             return (
               <button
@@ -323,7 +324,7 @@ export default function Home() {
               >
                 {/* Icons */}
                 <span style={{ fontSize: 22 }}>
-                  {t === "dashboard" ? "📊" : "💬"}
+                  {t === "dashboard" ? "📊" : t === "accounts" ? "🏦" : "💬"}
                 </span>
                 
                 <span className="sleek-text" style={{ textTransform: "capitalize", position: "relative", zIndex: 1, fontSize: 14 }}>
@@ -394,15 +395,17 @@ export default function Home() {
           marginBottom: 32, padding: "0 16px" 
         }}>
           <h2 className="sleek-text" style={{ fontSize: 24, color: "var(--text-primary)" }}>
-            {tab === "dashboard" ? "Overview" : "Intelligence"}
+            {tab === "dashboard" ? "Overview" : tab === "accounts" ? "Accounts" : "Intelligence"}
           </h2>
           <div style={{ display: "flex", gap: 12 }}>
-            <button
-              className="sleek-button primary"
-              onClick={() => setShowAddLog(true)}
-            >
-              Add Entry
-            </button>
+            {tab === "dashboard" && (
+              <button
+                className="sleek-button primary"
+                onClick={() => setShowAddLog(true)}
+              >
+                Add Entry
+              </button>
+            )}
           </div>
         </header>
 
@@ -419,6 +422,17 @@ export default function Home() {
                 style={{ height: "100%", overflowY: "auto", padding: "8px 16px 48px" }}
               >
                 <DashboardCharts />
+              </motion.div>
+            ) : tab === "accounts" ? (
+              <motion.div
+                key="accounts"
+                variants={slide}
+                initial="enter"
+                animate="show"
+                exit="exit"
+                style={{ height: "100%", overflowY: "auto", padding: "8px 16px 48px" }}
+              >
+                <AccountsPanel />
               </motion.div>
             ) : (
               <motion.div
