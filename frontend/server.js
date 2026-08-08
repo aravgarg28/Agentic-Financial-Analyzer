@@ -11,7 +11,9 @@ app.prepare().then(() => {
   // Custom Express gateway routes could go here
   server.get('/health', (req, res) => res.send('OK'));
 
-  server.all('*', (req, res) => {
+  // Catch-all: hand everything else to Next. Use middleware (not a '*' route) —
+  // Express 5 / path-to-regexp v8 rejects the bare '*' path string.
+  server.use((req, res) => {
     return handle(req, res);
   });
 
