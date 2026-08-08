@@ -19,6 +19,40 @@ pytestmark = pytest.mark.skipif(
 BACKEND = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _clean_schema():
+    """Start the migration tests from a truly empty schema.
+
+    The DB-backed functional tests build their schema with ``create_all`` and
+    leave tables behind with no ``alembic_version`` stamp. Without this reset,
+    the migration test's initial ``downgrade base`` is a no-op and the following
+    ``upgrade head`` collides with those leftover tables (DuplicateTable). This
+    ran green locally only because a developer DB happened to be stamped; on a
+    fresh CI database it would fail. Resetting makes the module state-independent.
+    """
+    import asyncio
+
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    url = os.getenv("DATABASE_URL")
+    if not url or "@db:" in url:
+        yield
+        return
+
+    async def _reset() -> None:
+        engine = create_async_engine(url, poolclass=NullPool)
+        try:
+            async with engine.begin() as conn:
+                await conn.exec_driver_sql("DROP SCHEMA public CASCADE")
+                await conn.exec_driver_sql("CREATE SCHEMA public")
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_reset())
+    yield
+
+
 def _config():
     from alembic.config import Config
 

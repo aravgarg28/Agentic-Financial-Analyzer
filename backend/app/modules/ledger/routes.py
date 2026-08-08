@@ -18,9 +18,22 @@ from app.modules.identity.audit import record_audit
 from app.modules.identity.deps import csrf_guard, require_principal
 from app.modules.identity.service import Principal
 from app.modules.ledger import accounts as accounts_service
+from app.modules.ledger import categories as categories_service
 from app.modules.ledger import service
 
 router = APIRouter(prefix="/ledger", tags=["Ledger"])
+
+
+def _parse_int_id(raw: str) -> int:
+    """Parse a path id to int. Kept a str path param on purpose so anonymous
+    requests reach the auth dependency (401) instead of failing FastAPI's int
+    coercion first (422)."""
+    try:
+        return int(raw)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND, detail="Not found."
+        ) from exc
 
 
 def _bad_request(exc: service.LedgerError) -> HTTPException:
@@ -279,3 +292,139 @@ async def add_transaction(
         "amount_minor": tx.amount_minor,
         "currency": tx.currency,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Categories (T-062)
+# --------------------------------------------------------------------------- #
+class CategoryCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+    type: str = Field(..., description="income|expense|transfer")
+    parent_id: int | None = None
+
+
+class CategoryUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=80)
+    parent_id: int | None = None
+    clear_parent: bool = False
+
+
+class Recategorize(BaseModel):
+    category_id: int | None = Field(None, description="null clears the category")
+
+
+@router.get("/categories")
+async def list_categories(
+    db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(require_principal),
+) -> dict:
+    rows = await categories_service.list_categories(db, principal.household_id)
+    return {"data": [categories_service.serialize_category(c) for c in rows]}
+
+
+@router.post("/categories", status_code=http_status.HTTP_201_CREATED)
+async def create_category(
+    data: CategoryCreate,
+    db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(require_principal),
+    _csrf: None = Depends(csrf_guard),
+) -> dict:
+    try:
+        cat = await categories_service.create_category(
+            db,
+            household_id=principal.household_id,
+            name=data.name,
+            type=data.type,
+            parent_id=data.parent_id,
+        )
+    except service.LedgerError as exc:
+        raise _bad_request(exc) from exc
+    await record_audit(
+        db,
+        action="category.create",
+        household_id=principal.household_id,
+        actor_user_id=principal.user_id,
+        target_type="category",
+        target_public_id=str(cat.id),
+    )
+    await db.commit()
+    return categories_service.serialize_category(cat)
+
+
+@router.patch("/categories/{category_id}")
+async def update_category(
+    category_id: str,
+    data: CategoryUpdate,
+    db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(require_principal),
+    _csrf: None = Depends(csrf_guard),
+) -> dict:
+    try:
+        cat = await categories_service.update_category(
+            db,
+            household_id=principal.household_id,
+            category_id=_parse_int_id(category_id),
+            name=data.name,
+            parent_id=data.parent_id,
+            clear_parent=data.clear_parent,
+        )
+    except service.LedgerError as exc:
+        raise _bad_request(exc) from exc
+    await db.commit()
+    return categories_service.serialize_category(cat)
+
+
+@router.delete("/categories/{category_id}")
+async def delete_category(
+    category_id: str,
+    db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(require_principal),
+    _csrf: None = Depends(csrf_guard),
+) -> dict:
+    try:
+        await categories_service.delete_category(
+            db,
+            household_id=principal.household_id,
+            category_id=_parse_int_id(category_id),
+        )
+    except service.LedgerError as exc:
+        raise _bad_request(exc) from exc
+    await record_audit(
+        db,
+        action="category.delete",
+        household_id=principal.household_id,
+        actor_user_id=principal.user_id,
+        target_type="category",
+        target_public_id=category_id,
+    )
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/transactions/{public_id}/recategorize")
+async def recategorize_transaction(
+    public_id: str,
+    data: Recategorize,
+    db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(require_principal),
+    _csrf: None = Depends(csrf_guard),
+) -> dict:
+    try:
+        tx = await categories_service.recategorize_transaction(
+            db,
+            household_id=principal.household_id,
+            transaction_public_id=public_id,
+            category_id=data.category_id,
+        )
+    except service.LedgerError as exc:
+        raise _bad_request(exc) from exc
+    await record_audit(
+        db,
+        action="transaction.recategorize",
+        household_id=principal.household_id,
+        actor_user_id=principal.user_id,
+        target_type="transaction",
+        target_public_id=tx.public_id,
+    )
+    await db.commit()
+    return {"status": "ok", "id": tx.public_id, "category_id": tx.category_id}

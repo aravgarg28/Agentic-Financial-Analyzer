@@ -117,8 +117,16 @@ class Category(Base):
         CheckConstraint(
             "type IN ('income', 'expense', 'transfer')", name="ck_categories_type"
         ),
+        # NULLS NOT DISTINCT (PG15+) so that top-level categories (parent_id
+        # NULL) still collide on duplicate (household_id, name) — a plain UNIQUE
+        # treats NULLs as distinct and would let duplicate top-level categories
+        # through. household_id NULL (system rows) is likewise deduped.
         UniqueConstraint(
-            "household_id", "parent_id", "name", name="uq_categories_scope_name"
+            "household_id",
+            "parent_id",
+            "name",
+            name="uq_categories_scope_name",
+            postgresql_nulls_not_distinct=True,
         ),
         Index("ix_categories_household", "household_id"),
     )

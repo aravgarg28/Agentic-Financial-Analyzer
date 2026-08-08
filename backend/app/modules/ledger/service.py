@@ -61,6 +61,23 @@ async def resolve_account(
     return account
 
 
+async def resolve_transaction(
+    session: AsyncSession, household_id: int, public_id: str
+) -> Transaction:
+    """Look up a live transaction by public id within the caller's household."""
+    result = await session.execute(
+        select(Transaction).where(
+            Transaction.public_id == public_id,
+            Transaction.household_id == household_id,
+            Transaction.deleted_at.is_(None),
+        )
+    )
+    tx = result.scalar_one_or_none()
+    if tx is None:
+        raise LedgerError("Transaction not found.")
+    return tx
+
+
 async def resolve_category_id(
     session: AsyncSession, household_id: int, category_id: int | None
 ) -> int | None:
