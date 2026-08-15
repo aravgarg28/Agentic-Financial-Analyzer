@@ -691,3 +691,56 @@ async def commit_batch(
         "committed": committed,
         "total_minor": total_minor,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Rollback (T-075)
+# --------------------------------------------------------------------------- #
+async def rollback_batch(
+    session: AsyncSession, *, household_id: int, batch_public_id: str
+) -> dict:
+    """Delete exactly this batch's committed transactions, returning the ledger
+    to its pre-import state, and mark the batch 'rolled_back'. Refused if any of
+    the batch's transactions has been edited since import (the user would lose
+    that work). Caller commits."""
+    batch = await resolve_batch(session, household_id, batch_public_id)
+    if batch.status != "committed":
+        raise UploadError("Only a committed batch can be rolled back.")
+
+    txns = list(
+        (
+            await session.execute(
+                select(Transaction).where(
+                    Transaction.import_batch_id == batch.id,
+                    Transaction.household_id == household_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    edited = [t for t in txns if t.edited_at is not None]
+    if edited:
+        raise UploadError(
+            f"Cannot roll back: {len(edited)} transaction(s) have been edited "
+            "since import. Undo those edits (or delete them) first."
+        )
+
+    account_ids = {t.account_id for t in txns}
+    deleted = len(txns)
+    # Hard delete so the ledger is byte-identical to before the import. The
+    # imported_records.committed_transaction_id FK is SET NULL automatically.
+    await session.execute(
+        delete(Transaction).where(
+            Transaction.import_batch_id == batch.id,
+            Transaction.household_id == household_id,
+        )
+    )
+    for account_id in account_ids:
+        account = await session.get(Account, account_id)
+        if account is not None:
+            await ledger_accounts.recompute_account_balance(session, account)
+
+    batch.status = "rolled_back"
+    await session.flush()
+    return {"batch_id": batch.public_id, "deleted": deleted}

@@ -246,6 +246,10 @@ async def edit_transaction(
             amount_minor=tx.amount_minor,
             normalized_desc=tx.normalized_description or "",
         )
+    # Mark as user-edited so import rollback won't silently delete it.
+    from datetime import UTC, datetime
+
+    tx.edited_at = datetime.now(UTC)
     await session.flush()
 
     account = await session.get(Account, tx.account_id)

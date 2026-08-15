@@ -214,6 +214,10 @@ class Transaction(Base):
 
     created_at: Mapped[datetime] = created_at()
     updated_at: Mapped[datetime | None] = updated_at()
+    # Set only on a real user edit (NULL otherwise), so import rollback (T-075)
+    # can refuse to delete rows the user has since changed. updated_at is unusable
+    # for this because it defaults to now() at insert time.
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_at: Mapped[datetime | None] = deleted_at()
 
     __table_args__ = (

@@ -68,6 +68,7 @@ AUTHENTICATED_ROUTES = {
     ("PATCH", "/imports/{batch_id}/records/{row_number}"),
     ("POST", "/imports/{batch_id}/records/bulk"),
     ("POST", "/imports/{batch_id}/commit"),
+    ("POST", "/imports/{batch_id}/rollback"),
     ("GET", "/imports/mappings"),
     ("POST", "/imports/mappings"),
     ("POST", "/agent/query"),
