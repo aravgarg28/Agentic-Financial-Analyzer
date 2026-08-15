@@ -1,0 +1,4 @@
+Transaction Date,Posted Date,Card No.,Description,Category,Debit,Credit
+2026-01-17,2026-01-18,1234,COFFEE HOUSE,Dining,4.25,
+2026-01-18,2026-01-19,1234,PURCHASE REFUND,Merchandise,,15.00
+2026-01-19,2026-01-20,1234,BOOKSTORE,Merchandise,27.80,
