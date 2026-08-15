@@ -294,6 +294,127 @@ async def add_transaction(
     }
 
 
+def _serialize_transaction(tx) -> dict:
+    return {
+        "id": tx.public_id,
+        "amount_minor": tx.amount_minor,
+        "currency": tx.currency,
+        "booked_date": tx.booked_date.isoformat(),
+        "description": tx.raw_description,
+        "category_id": tx.category_id,
+        "status": tx.status,
+        "source": tx.source,
+    }
+
+
+@router.get("/transactions")
+async def list_transactions(
+    account_id: str | None = Query(None, description="Account public id"),
+    category_id: int | None = Query(None),
+    uncategorized: bool = Query(False),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    min_amount_minor: int | None = Query(None),
+    max_amount_minor: int | None = Query(None),
+    search: str | None = Query(None, max_length=200),
+    limit: int = Query(50, ge=1, le=200),
+    cursor: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(require_principal),
+) -> dict:
+    filters = service.TransactionFilters(
+        account_public_id=account_id,
+        category_id=category_id,
+        uncategorized=uncategorized,
+        start_date=start_date,
+        end_date=end_date,
+        min_amount_minor=min_amount_minor,
+        max_amount_minor=max_amount_minor,
+        search=search,
+    )
+    try:
+        rows, next_cursor = await service.list_transactions(
+            db, principal.household_id, filters=filters, limit=limit, cursor=cursor
+        )
+    except service.LedgerError as exc:
+        raise _bad_request(exc) from exc
+    return {
+        "data": [_serialize_transaction(t) for t in rows],
+        "next_cursor": next_cursor,
+    }
+
+
+class TransactionEdit(BaseModel):
+    amount_minor: int | None = None
+    booked_date: date | None = None
+    description: str | None = Field(None, max_length=500)
+    category_id: int | None = None
+
+
+@router.patch("/transactions/{public_id}")
+async def edit_transaction(
+    public_id: str,
+    data: TransactionEdit,
+    db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(require_principal),
+    _csrf: None = Depends(csrf_guard),
+) -> dict:
+    # exclude_unset lets us tell "not provided" from an explicit null (which
+    # clears description/category).
+    provided = data.model_dump(exclude_unset=True)
+    kwargs: dict = {}
+    if "amount_minor" in provided:
+        kwargs["amount_minor"] = provided["amount_minor"]
+    if "booked_date" in provided:
+        kwargs["booked_date"] = provided["booked_date"]
+    if "description" in provided:
+        kwargs["raw_description"] = provided["description"]
+    if "category_id" in provided:
+        kwargs["category_id"] = provided["category_id"]
+    try:
+        tx = await service.edit_transaction(
+            db, household_id=principal.household_id, public_id=public_id, **kwargs
+        )
+    except service.LedgerError as exc:
+        raise _bad_request(exc) from exc
+    await record_audit(
+        db,
+        action="transaction.edit",
+        household_id=principal.household_id,
+        actor_user_id=principal.user_id,
+        target_type="transaction",
+        target_public_id=tx.public_id,
+        metadata={"fields": sorted(provided.keys())},
+    )
+    await db.commit()
+    return _serialize_transaction(tx)
+
+
+@router.delete("/transactions/{public_id}")
+async def delete_transaction(
+    public_id: str,
+    db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(require_principal),
+    _csrf: None = Depends(csrf_guard),
+) -> dict:
+    try:
+        tx = await service.soft_delete_transaction(
+            db, household_id=principal.household_id, public_id=public_id
+        )
+    except service.LedgerError as exc:
+        raise _bad_request(exc) from exc
+    await record_audit(
+        db,
+        action="transaction.delete",
+        household_id=principal.household_id,
+        actor_user_id=principal.user_id,
+        target_type="transaction",
+        target_public_id=tx.public_id,
+    )
+    await db.commit()
+    return {"status": "ok", "id": tx.public_id}
+
+
 # --------------------------------------------------------------------------- #
 # Categories (T-062)
 # --------------------------------------------------------------------------- #

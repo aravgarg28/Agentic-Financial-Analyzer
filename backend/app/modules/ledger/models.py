@@ -132,11 +132,34 @@ class Category(Base):
     )
 
 
-class Transaction(Base):
-    """Canonical, provider-independent transaction (R0 columns).
+class Merchant(Base):
+    """Normalized payee (T-061). canonical_name is the normalized description;
+    transactions with the same normalized description share one merchant, which
+    powers merchant analytics and (later) rules."""
 
-    Deferred to later migrations: merchant_id, transfer_id, refund_of,
-    recurring_series_id, import_batch_id, imported_record_id, connection_id.
+    __tablename__ = "merchants"
+
+    id: Mapped[int] = id_pk()
+    household_id: Mapped[int] = mapped_column(
+        ForeignKey("households.id", ondelete="CASCADE"), nullable=False
+    )
+    canonical_name: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_pattern: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = created_at()
+
+    __table_args__ = (
+        UniqueConstraint(
+            "household_id", "canonical_name", name="uq_merchants_scope_name"
+        ),
+        Index("ix_merchants_household", "household_id"),
+    )
+
+
+class Transaction(Base):
+    """Canonical, provider-independent transaction (R0 columns + merchant link).
+
+    Deferred to later migrations: transfer_id, refund_of, recurring_series_id,
+    import_batch_id, imported_record_id, connection_id.
     """
 
     __tablename__ = "transactions"
@@ -147,6 +170,10 @@ class Transaction(Base):
     )
     account_id: Mapped[int] = mapped_column(
         ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False
+    )
+    merchant_id: Mapped[int | None] = mapped_column(
+        ForeignKey("merchants.id", ondelete="SET NULL", name="fk_transactions_merchant_id"),
+        nullable=True,
     )
     public_id: Mapped[str] = public_uuid()
 
