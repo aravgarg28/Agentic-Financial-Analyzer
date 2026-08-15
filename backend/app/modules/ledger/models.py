@@ -156,10 +156,11 @@ class Merchant(Base):
 
 
 class Transaction(Base):
-    """Canonical, provider-independent transaction (R0 columns + merchant link).
+    """Canonical, provider-independent transaction (R0 columns + merchant link +
+    import provenance).
 
     Deferred to later migrations: transfer_id, refund_of, recurring_series_id,
-    import_batch_id, imported_record_id, connection_id.
+    connection_id.
     """
 
     __tablename__ = "transactions"
@@ -173,6 +174,23 @@ class Transaction(Base):
     )
     merchant_id: Mapped[int | None] = mapped_column(
         ForeignKey("merchants.id", ondelete="SET NULL", name="fk_transactions_merchant_id"),
+        nullable=True,
+    )
+    # Import provenance (T-074): which batch/record produced this row. Enables
+    # citations and batch rollback (T-075). NULL for manually-added transactions.
+    import_batch_id: Mapped[int | None] = mapped_column(
+        ForeignKey("import_batches.id", ondelete="SET NULL", name="fk_transactions_import_batch_id"),
+        nullable=True,
+    )
+    # use_alter breaks the metadata FK cycle (imported_records.committed_transaction_id
+    # points back here) for create_all/table sorting; the DB constraint is unchanged.
+    imported_record_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "imported_records.id",
+            ondelete="SET NULL",
+            name="fk_transactions_imported_record_id",
+            use_alter=True,
+        ),
         nullable=True,
     )
     public_id: Mapped[str] = public_uuid()
@@ -228,4 +246,10 @@ class Transaction(Base):
             "booked_date",
         ),
         Index("ix_transactions_fingerprint", "dedup_fingerprint"),
+        # Batch rollback (T-075) deletes exactly this batch's rows.
+        Index(
+            "ix_transactions_import_batch",
+            "import_batch_id",
+            postgresql_where=text("import_batch_id IS NOT NULL"),
+        ),
     )

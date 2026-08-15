@@ -22,16 +22,21 @@ from app.modules.ingestion.models import (
     ImportBatch,
     ImportedRecord,
 )
+from app.modules.ledger import accounts as ledger_accounts
 from app.modules.ledger.accounts import resolve_institution
-from app.modules.ledger.models import Transaction
+from app.modules.ledger.models import Account, Transaction
 from app.modules.ledger.service import (
     LedgerError,
     compute_fingerprint,
     normalize_description,
     resolve_account,
+    resolve_category_id,
+    resolve_or_create_merchant,
 )
 
 PREVIEW_SAMPLE_ROWS = 10
+COMMIT_CHUNK = 500
+VALID_DECISIONS = frozenset({"accept", "skip", "merge"})
 
 # Only CSV/plain text in R1. Extensions and (loose) content types are checked;
 # the file is parsed as CSV, never executed.
@@ -462,3 +467,227 @@ async def dedup_batch(
     batch.dup_count = counts["duplicate"]
     await session.flush()
     return {"batch_id": batch.public_id, **counts}
+
+
+# --------------------------------------------------------------------------- #
+# Review (list/decide) + commit (T-074)
+# --------------------------------------------------------------------------- #
+def _has_errors(record: ImportedRecord) -> bool:
+    return bool(record.validation and record.validation.get("errors"))
+
+
+def serialize_record(record: ImportedRecord) -> dict:
+    return {
+        "row_number": record.row_number,
+        "raw": record.raw,
+        "amount_minor": record.parsed_amount_minor,
+        "date": record.parsed_date.isoformat() if record.parsed_date else None,
+        "currency": record.parsed_currency,
+        "description": record.parsed_description,
+        "category_id": record.category_id,
+        "verdict": record.dedup_verdict,
+        "decision": record.user_decision,
+        "validation": record.validation,
+        "committed": record.committed_transaction_id is not None,
+    }
+
+
+async def list_records(
+    session: AsyncSession,
+    household_id: int,
+    batch_public_id: str,
+    *,
+    offset: int = 0,
+    limit: int = 100,
+    verdict: str | None = None,
+    decision: str | None = None,
+) -> tuple[ImportBatch, list[ImportedRecord], int]:
+    batch = await resolve_batch(session, household_id, batch_public_id)
+    conds = [ImportedRecord.import_batch_id == batch.id]
+    if verdict:
+        conds.append(ImportedRecord.dedup_verdict == verdict)
+    if decision:
+        conds.append(ImportedRecord.user_decision == decision)
+    total = await session.scalar(
+        select(func.count()).select_from(ImportedRecord).where(*conds)
+    )
+    rows = list(
+        (
+            await session.execute(
+                select(ImportedRecord)
+                .where(*conds)
+                .order_by(ImportedRecord.row_number)
+                .offset(offset)
+                .limit(min(limit, 500))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return batch, rows, int(total or 0)
+
+
+async def _resolve_record(
+    session: AsyncSession, batch: ImportBatch, row_number: int
+) -> ImportedRecord:
+    record = await session.scalar(
+        select(ImportedRecord).where(
+            ImportedRecord.import_batch_id == batch.id,
+            ImportedRecord.row_number == row_number,
+        )
+    )
+    if record is None:
+        raise UploadError("Record not found.")
+    return record
+
+
+async def set_record_decision(
+    session: AsyncSession,
+    *,
+    household_id: int,
+    batch_public_id: str,
+    row_number: int,
+    decision: str | None = None,
+    category_id: int | None = None,
+    set_category: bool = False,
+) -> ImportedRecord:
+    batch = await resolve_batch(session, household_id, batch_public_id)
+    if batch.status != "staged":
+        raise UploadError("This batch can no longer be edited.")
+    record = await _resolve_record(session, batch, row_number)
+    if decision is not None:
+        if decision not in VALID_DECISIONS:
+            raise UploadError(f"Invalid decision: {decision!r}.")
+        if decision == "accept" and _has_errors(record):
+            raise UploadError("A row with validation errors cannot be accepted.")
+        record.user_decision = decision
+    if set_category:
+        record.category_id = await resolve_category_id(session, household_id, category_id)
+    await session.flush()
+    return record
+
+
+async def bulk_set_decision(
+    session: AsyncSession,
+    *,
+    household_id: int,
+    batch_public_id: str,
+    decision: str,
+    verdict: str | None = None,
+) -> dict:
+    """Apply a decision to every record (optionally filtered by verdict). Rows
+    with validation errors are never auto-accepted."""
+    if decision not in VALID_DECISIONS:
+        raise UploadError(f"Invalid decision: {decision!r}.")
+    batch = await resolve_batch(session, household_id, batch_public_id)
+    if batch.status != "staged":
+        raise UploadError("This batch can no longer be edited.")
+    conds = [ImportedRecord.import_batch_id == batch.id]
+    if verdict:
+        conds.append(ImportedRecord.dedup_verdict == verdict)
+    records = list((await session.execute(select(ImportedRecord).where(*conds))).scalars().all())
+    changed = 0
+    for record in records:
+        if decision == "accept" and _has_errors(record):
+            continue
+        record.user_decision = decision
+        changed += 1
+    await session.flush()
+    return {"batch_id": batch.public_id, "updated": changed}
+
+
+async def commit_batch(
+    session: AsyncSession, *, household_id: int, batch_public_id: str
+) -> dict:
+    """Insert one Transaction per accepted, error-free record, in a single
+    transaction (the caller commits). Atomic: any failure leaves the batch
+    'staged' with no rows written. Chunked flushes keep memory bounded so a
+    10k-row batch commits within the request window."""
+    batch = await resolve_batch(session, household_id, batch_public_id)
+    if batch.status != "staged":
+        raise UploadError("Only a staged batch can be committed.")
+    if batch.account_id is None:
+        raise UploadError("Select an account and run de-duplication before committing.")
+    account = await session.get(Account, batch.account_id)
+    if account is None or account.household_id != household_id:
+        raise UploadError("Import account not found.")
+
+    batch.status = "committing"
+    await session.flush()
+
+    records = list(
+        (
+            await session.execute(
+                select(ImportedRecord)
+                .where(ImportedRecord.import_batch_id == batch.id)
+                .order_by(ImportedRecord.row_number)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    committed = 0
+    total_minor = 0
+    pending: list[tuple[ImportedRecord, Transaction]] = []
+
+    async def _flush_pending() -> None:
+        await session.flush()
+        for rec, tx in pending:
+            rec.committed_transaction_id = tx.id
+        pending.clear()
+
+    for record in records:
+        if record.user_decision != "accept" or _has_errors(record):
+            continue
+        if record.parsed_amount_minor is None or record.parsed_date is None:
+            continue
+        normalized = normalize_description(record.parsed_description)
+        merchant = await resolve_or_create_merchant(session, household_id, normalized)
+        currency = record.parsed_currency or account.currency
+        fingerprint = compute_fingerprint(
+            account_id=account.id,
+            booked_date=record.parsed_date,
+            amount_minor=record.parsed_amount_minor,
+            normalized_desc=normalized,
+        )
+        tx = Transaction(
+            household_id=household_id,
+            account_id=account.id,
+            merchant_id=merchant.id if merchant else None,
+            import_batch_id=batch.id,
+            imported_record_id=record.id,
+            amount_minor=record.parsed_amount_minor,
+            currency=currency,
+            booked_date=record.parsed_date,
+            status="posted",
+            category_id=record.category_id,
+            raw_description=record.parsed_description,
+            normalized_description=normalized or None,
+            source="csv",
+            dedup_fingerprint=fingerprint,
+        )
+        session.add(tx)
+        pending.append((record, tx))
+        committed += 1
+        total_minor += record.parsed_amount_minor
+        if len(pending) >= COMMIT_CHUNK:
+            await _flush_pending()
+
+    if pending:
+        await _flush_pending()
+
+    # Refresh the cached balance (patchable point; failure here rolls everything
+    # back, leaving the batch 'staged').
+    await ledger_accounts.recompute_account_balance(session, account)
+
+    from datetime import UTC, datetime
+
+    batch.status = "committed"
+    batch.committed_at = datetime.now(UTC)
+    await session.flush()
+    return {
+        "batch_id": batch.public_id,
+        "committed": committed,
+        "total_minor": total_minor,
+    }

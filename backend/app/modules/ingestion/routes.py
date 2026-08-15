@@ -6,7 +6,7 @@ file is stored and parsed as data, never executed or served inline.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi import status as http_status
 from fastapi.exceptions import HTTPException
 from pydantic import BaseModel, Field
@@ -25,6 +25,17 @@ router = APIRouter(prefix="/imports", tags=["Imports"])
 
 def _bad_request(exc: service.LedgerError) -> HTTPException:
     return HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+def _parse_int_id(raw: str) -> int:
+    """Parse a path id to int. Kept a str path param so anonymous requests hit
+    auth (401) instead of FastAPI int-coercion (422)."""
+    try:
+        return int(raw)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND, detail="Not found."
+        ) from exc
 
 
 @router.post("/upload", status_code=http_status.HTTP_201_CREATED)
@@ -119,6 +130,114 @@ async def stage_batch(
         target_type="import_batch",
         target_public_id=batch_id,
         metadata={"rows": summary["total"], "errors": summary["errors"]},
+    )
+    await db.commit()
+    return summary
+
+
+@router.get("/{batch_id}/records")
+async def list_records(
+    batch_id: str,
+    verdict: str | None = Query(None),
+    decision: str | None = Query(None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(require_principal),
+) -> dict:
+    try:
+        batch, rows, total = await service.list_records(
+            db, principal.household_id, batch_id,
+            offset=offset, limit=limit, verdict=verdict, decision=decision,
+        )
+    except service.LedgerError as exc:
+        raise _bad_request(exc) from exc
+    return {
+        "batch": service.serialize_batch(batch),
+        "total": total,
+        "data": [service.serialize_record(r) for r in rows],
+    }
+
+
+class RecordDecision(BaseModel):
+    decision: str | None = None
+    category_id: int | None = None
+
+
+@router.patch("/{batch_id}/records/{row_number}")
+async def update_record(
+    batch_id: str,
+    row_number: str,
+    data: RecordDecision,
+    db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(require_principal),
+    _csrf: None = Depends(csrf_guard),
+) -> dict:
+    provided = data.model_dump(exclude_unset=True)
+    try:
+        record = await service.set_record_decision(
+            db,
+            household_id=principal.household_id,
+            batch_public_id=batch_id,
+            row_number=_parse_int_id(row_number),
+            decision=data.decision,
+            category_id=data.category_id,
+            set_category="category_id" in provided,
+        )
+    except service.LedgerError as exc:
+        raise _bad_request(exc) from exc
+    await db.commit()
+    return service.serialize_record(record)
+
+
+class BulkDecision(BaseModel):
+    decision: str
+    verdict: str | None = None
+
+
+@router.post("/{batch_id}/records/bulk")
+async def bulk_update_records(
+    batch_id: str,
+    data: BulkDecision,
+    db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(require_principal),
+    _csrf: None = Depends(csrf_guard),
+) -> dict:
+    try:
+        summary = await service.bulk_set_decision(
+            db,
+            household_id=principal.household_id,
+            batch_public_id=batch_id,
+            decision=data.decision,
+            verdict=data.verdict,
+        )
+    except service.LedgerError as exc:
+        raise _bad_request(exc) from exc
+    await db.commit()
+    return summary
+
+
+@router.post("/{batch_id}/commit")
+async def commit_batch(
+    batch_id: str,
+    db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(require_principal),
+    _csrf: None = Depends(csrf_guard),
+) -> dict:
+    try:
+        summary = await service.commit_batch(
+            db, household_id=principal.household_id, batch_public_id=batch_id
+        )
+    except service.LedgerError as exc:
+        raise _bad_request(exc) from exc
+    await record_audit(
+        db,
+        action="import.commit",
+        household_id=principal.household_id,
+        actor_user_id=principal.user_id,
+        target_type="import_batch",
+        target_public_id=batch_id,
+        metadata={"committed": summary["committed"]},
     )
     await db.commit()
     return summary

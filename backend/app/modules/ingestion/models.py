@@ -149,6 +149,13 @@ class ImportedRecord(Base):
     parsed_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     parsed_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     parsed_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Review-time category choice, applied to the transaction on commit (T-074).
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "categories.id", ondelete="SET NULL", name="fk_imported_records_category_id"
+        ),
+        nullable=True,
+    )
     validation: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     dedup_verdict: Mapped[str | None] = mapped_column(String(10), nullable=True)
     user_decision: Mapped[str] = mapped_column(
