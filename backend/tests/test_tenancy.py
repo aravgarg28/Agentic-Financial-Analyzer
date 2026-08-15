@@ -61,6 +61,9 @@ AUTHENTICATED_ROUTES = {
     ("DELETE", "/ledger/categories/{category_id}"),
     ("POST", "/ledger/transactions/{public_id}/recategorize"),
     ("POST", "/imports/upload"),
+    ("GET", "/imports/{batch_id}/preview"),
+    ("GET", "/imports/mappings"),
+    ("POST", "/imports/mappings"),
     ("POST", "/agent/query"),
 }
 

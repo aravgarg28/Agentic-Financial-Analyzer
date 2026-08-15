@@ -10,11 +10,17 @@ from __future__ import annotations
 import hashlib
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.modules.ingestion.models import Document, ImportBatch
+from app.modules.ingestion import parser, presets
+from app.modules.ingestion.mapping import MappingSpec, suggest_mapping
+from app.modules.ingestion.models import ColumnMapping, Document, ImportBatch
+from app.modules.ledger.accounts import resolve_institution
 from app.modules.ledger.service import LedgerError, resolve_account
+
+PREVIEW_SAMPLE_ROWS = 10
 
 # Only CSV/plain text in R1. Extensions and (loose) content types are checked;
 # the file is parsed as CSV, never executed.
@@ -131,4 +137,112 @@ def serialize_batch(batch: ImportBatch) -> dict:
         "row_count": batch.row_count,
         "new_count": batch.new_count,
         "dup_count": batch.dup_count,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Batch/document resolution + preview + mappings (T-071)
+# --------------------------------------------------------------------------- #
+async def resolve_batch(
+    session: AsyncSession, household_id: int, public_id: str
+) -> ImportBatch:
+    batch = await session.scalar(
+        select(ImportBatch).where(
+            ImportBatch.public_id == public_id,
+            ImportBatch.household_id == household_id,
+        )
+    )
+    if batch is None:
+        raise UploadError("Import batch not found.")
+    return batch
+
+
+async def _load_document(session: AsyncSession, household_id: int, document_id: int) -> Document:
+    doc = await session.scalar(
+        select(Document).where(
+            Document.id == document_id,
+            Document.household_id == household_id,
+            Document.deleted_at.is_(None),
+        )
+    )
+    if doc is None:
+        raise UploadError("Uploaded file not found.")
+    return doc
+
+
+async def preview_batch(
+    session: AsyncSession, household_id: int, batch_public_id: str
+) -> dict:
+    """Sniff the uploaded CSV and return headers + sample rows, an auto-suggested
+    mapping, matching built-in presets, and the household's saved mappings."""
+    batch = await resolve_batch(session, household_id, batch_public_id)
+    if batch.file_document_id is None:
+        raise UploadError("This batch has no associated file.")
+    doc = await _load_document(session, household_id, batch.file_document_id)
+
+    parsed = parser.parse_csv(doc.content, sample_limit=PREVIEW_SAMPLE_ROWS)
+    suggested, notes = suggest_mapping(parsed.headers)
+    saved = await list_mappings(session, household_id)
+
+    return {
+        "batch_id": batch.public_id,
+        "encoding": parsed.encoding,
+        "delimiter": parsed.delimiter,
+        "headers": parsed.headers,
+        "sample_rows": parsed.rows,
+        "total_rows": parsed.total_rows,
+        "suggested_mapping": suggested.model_dump() if suggested else None,
+        "suggestion_notes": notes,
+        "presets": [presets.serialize_preset(p) for p in presets.match_presets(parsed.headers)],
+        "saved_mappings": [serialize_mapping(m) for m in saved],
+    }
+
+
+async def list_mappings(session: AsyncSession, household_id: int) -> list[ColumnMapping]:
+    result = await session.execute(
+        select(ColumnMapping)
+        .where(
+            ColumnMapping.household_id == household_id,
+            ColumnMapping.deleted_at.is_(None),
+        )
+        .order_by(ColumnMapping.name)
+    )
+    return list(result.scalars().all())
+
+
+async def save_mapping(
+    session: AsyncSession,
+    *,
+    household_id: int,
+    name: str,
+    mapping: MappingSpec,
+    institution_public_id: str | None = None,
+) -> ColumnMapping:
+    clean = name.strip()
+    if not clean:
+        raise UploadError("Mapping name is required.")
+    institution_id: int | None = None
+    if institution_public_id:
+        inst = await resolve_institution(session, household_id, institution_public_id)
+        institution_id = inst.id
+    row = ColumnMapping(
+        household_id=household_id,
+        institution_id=institution_id,
+        name=clean,
+        mapping=mapping.model_dump(),
+    )
+    session.add(row)
+    try:
+        await session.flush()
+    except IntegrityError as exc:  # unique (household_id, name)
+        await session.rollback()
+        raise UploadError("A mapping with that name already exists.") from exc
+    return row
+
+
+def serialize_mapping(row: ColumnMapping) -> dict:
+    return {
+        "id": row.public_id,
+        "name": row.name,
+        "mapping": row.mapping,
     }
