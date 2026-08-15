@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     # Render deploys; empty means host-only cookie.
     cookie_domain: str = os.getenv("COOKIE_DOMAIN", "")
 
+    # CSV import (T-070). Per-file size cap and per-household total document quota.
+    max_upload_bytes: int = int(os.getenv("MAX_UPLOAD_BYTES", str(5 * 1024 * 1024)))
+    household_document_quota_bytes: int = int(
+        os.getenv("HOUSEHOLD_DOCUMENT_QUOTA_BYTES", str(50 * 1024 * 1024))
+    )
+
     @property
     def is_production(self) -> bool:
         return self.environment.lower() == "production"

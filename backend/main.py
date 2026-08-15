@@ -13,6 +13,7 @@ load_dotenv(dotenv_path="../.env")
 from app.config import settings
 from app.modules.identity.routes import household_router
 from app.modules.identity.routes import router as auth_router
+from app.modules.ingestion.routes import router as ingestion_router
 from app.modules.insights.agent_routes import router as agent_router
 from app.modules.insights.routes import router as insights_router
 from app.modules.ledger.routes import router as ledger_router
@@ -75,6 +76,7 @@ app.include_router(auth_router)
 app.include_router(household_router)
 app.include_router(insights_router)
 app.include_router(ledger_router)
+app.include_router(ingestion_router)
 app.include_router(agent_router)
 
 

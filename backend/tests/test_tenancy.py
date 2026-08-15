@@ -60,6 +60,7 @@ AUTHENTICATED_ROUTES = {
     ("PATCH", "/ledger/categories/{category_id}"),
     ("DELETE", "/ledger/categories/{category_id}"),
     ("POST", "/ledger/transactions/{public_id}/recategorize"),
+    ("POST", "/imports/upload"),
     ("POST", "/agent/query"),
 }
 
