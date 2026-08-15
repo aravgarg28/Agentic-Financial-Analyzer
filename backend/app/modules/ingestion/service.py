@@ -9,14 +9,19 @@ from __future__ import annotations
 
 import hashlib
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.modules.ingestion import parser, presets
+from app.modules.ingestion import coerce, parser, presets
 from app.modules.ingestion.mapping import MappingSpec, suggest_mapping
-from app.modules.ingestion.models import ColumnMapping, Document, ImportBatch
+from app.modules.ingestion.models import (
+    ColumnMapping,
+    Document,
+    ImportBatch,
+    ImportedRecord,
+)
 from app.modules.ledger.accounts import resolve_institution
 from app.modules.ledger.service import LedgerError, resolve_account
 
@@ -245,4 +250,108 @@ def serialize_mapping(row: ColumnMapping) -> dict:
         "id": row.public_id,
         "name": row.name,
         "mapping": row.mapping,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Staging: apply a mapping -> imported_records with parsed values + validation
+# (T-072)
+# --------------------------------------------------------------------------- #
+def _coerce_row(row: dict[str, str], mapping: MappingSpec) -> dict:
+    """Parse one raw row into canonical fields + a validation record. Money goes
+    straight to integer minor units via Decimal (never float)."""
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    amount_minor: int | None = None
+    if mapping.amount.mode == "single":
+        minor, err = coerce.parse_amount_minor(row.get(mapping.amount.column or "", ""))
+        if err:
+            errors.append(f"amount: {err}")
+        else:
+            amount_minor = coerce.apply_sign_convention(minor, mapping.amount.sign)
+    else:
+        minor, err = coerce.parse_amount_debit_credit(
+            row.get(mapping.amount.debit_column or ""),
+            row.get(mapping.amount.credit_column or ""),
+        )
+        if err:
+            errors.append(f"amount: {err}")
+        else:
+            amount_minor = minor
+
+    parsed_date, derr = coerce.parse_date(
+        row.get(mapping.date.column, ""), mapping.date.format
+    )
+    if derr:
+        errors.append(f"date: {derr}")
+
+    description = (row.get(mapping.description_column, "") or "").strip()
+    if not description:
+        warnings.append("empty description")
+
+    return {
+        "amount_minor": amount_minor,
+        "date": parsed_date,
+        "currency": mapping.currency,
+        "description": description or None,
+        "validation": {"errors": errors, "warnings": warnings},
+    }
+
+
+async def stage_batch(
+    session: AsyncSession,
+    *,
+    household_id: int,
+    batch_public_id: str,
+    mapping: MappingSpec,
+) -> dict:
+    """Apply ``mapping`` to the batch's CSV, (re)creating imported_records with
+    parsed values + per-row validation. Re-runnable: existing staged records are
+    cleared first so the user can fix the mapping and re-stage. Dedup verdicts
+    are assigned separately (T-073)."""
+    batch = await resolve_batch(session, household_id, batch_public_id)
+    if batch.status != "staged":
+        raise UploadError("This batch can no longer be staged.")
+    if batch.file_document_id is None:
+        raise UploadError("This batch has no associated file.")
+    doc = await _load_document(session, household_id, batch.file_document_id)
+
+    parsed = parser.parse_csv(doc.content, skip_rows=mapping.skip_rows)
+    missing = mapping.validate_against(parsed.headers)
+    if missing:
+        raise UploadError(f"Mapping references columns not in the file: {missing}")
+
+    # Clear any previous staging for this batch (idempotent re-stage).
+    await session.execute(
+        delete(ImportedRecord).where(ImportedRecord.import_batch_id == batch.id)
+    )
+
+    error_count = 0
+    for row_number, row in enumerate(parsed.rows, start=1):
+        coerced = _coerce_row(row, mapping)
+        if coerced["validation"]["errors"]:
+            error_count += 1
+        session.add(
+            ImportedRecord(
+                household_id=household_id,
+                import_batch_id=batch.id,
+                row_number=row_number,
+                raw=row,
+                parsed_amount_minor=coerced["amount_minor"],
+                parsed_date=coerced["date"],
+                parsed_currency=coerced["currency"],
+                parsed_description=coerced["description"],
+                validation=coerced["validation"],
+                user_decision="pending",
+            )
+        )
+
+    batch.row_count = len(parsed.rows)
+    await session.flush()
+    return {
+        "batch_id": batch.public_id,
+        "total": len(parsed.rows),
+        "errors": error_count,
+        "valid": len(parsed.rows) - error_count,
     }

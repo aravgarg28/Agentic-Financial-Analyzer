@@ -90,6 +90,40 @@ class MappingCreate(BaseModel):
     institution_id: str | None = None
 
 
+class StageRequest(BaseModel):
+    mapping: MappingSpec
+
+
+@router.post("/{batch_id}/stage")
+async def stage_batch(
+    batch_id: str,
+    data: StageRequest,
+    db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(require_principal),
+    _csrf: None = Depends(csrf_guard),
+) -> dict:
+    try:
+        summary = await service.stage_batch(
+            db,
+            household_id=principal.household_id,
+            batch_public_id=batch_id,
+            mapping=data.mapping,
+        )
+    except service.LedgerError as exc:
+        raise _bad_request(exc) from exc
+    await record_audit(
+        db,
+        action="import.stage",
+        household_id=principal.household_id,
+        actor_user_id=principal.user_id,
+        target_type="import_batch",
+        target_public_id=batch_id,
+        metadata={"rows": summary["total"], "errors": summary["errors"]},
+    )
+    await db.commit()
+    return summary
+
+
 @router.get("/mappings")
 async def list_mappings(
     db: AsyncSession = Depends(get_db),
