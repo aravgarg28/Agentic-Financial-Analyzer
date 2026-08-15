@@ -193,6 +193,111 @@ export async function addTransaction(data: {
   return mutate("/ledger/transactions", "POST", data);
 }
 
+// ── CSV Import (T-070..T-076) ─────────────────────────────────────────────────
+
+export interface ImportBatch {
+  id: string;
+  status: string;
+  filename: string | null;
+  source: string;
+  row_count: number;
+  new_count: number;
+  dup_count: number;
+  created?: boolean;
+}
+
+export interface ImportPreview {
+  batch_id: string;
+  encoding: string;
+  delimiter: string;
+  headers: string[];
+  sample_rows: Record<string, string>[];
+  total_rows: number;
+  suggested_mapping: Record<string, unknown> | null;
+  suggestion_notes: string[];
+  presets: { key: string; name: string; mapping: Record<string, unknown> }[];
+  saved_mappings: { id: string; name: string; mapping: Record<string, unknown> }[];
+}
+
+export interface ImportRecord {
+  row_number: number;
+  raw: Record<string, string>;
+  amount_minor: number | null;
+  date: string | null;
+  currency: string | null;
+  description: string | null;
+  category_id: number | null;
+  verdict: string | null;
+  decision: string;
+  validation: { errors: string[]; warnings: string[] } | null;
+  committed: boolean;
+}
+
+/** Multipart upload — returns the staged batch (created=false if a dup file). */
+export async function uploadCsv(file: File, accountId?: string): Promise<ImportBatch> {
+  const form = new FormData();
+  form.append("file", file);
+  if (accountId) form.append("account_id", accountId);
+  const res = await fetch(`${API_URL}/imports/upload`, {
+    method: "POST",
+    headers: { "X-Requested-With": "XMLHttpRequest" }, // no Content-Type: browser sets multipart boundary
+    credentials: "include",
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Upload failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function previewImport(batchId: string): Promise<ImportPreview> {
+  return getJson(`/imports/${batchId}/preview`);
+}
+
+export async function stageImport(batchId: string, mapping: Record<string, unknown>) {
+  return mutate(`/imports/${batchId}/stage`, "POST", { mapping });
+}
+
+export async function dedupImport(batchId: string, accountId: string) {
+  return mutate(`/imports/${batchId}/dedup`, "POST", { account_id: accountId });
+}
+
+export async function listImportRecords(
+  batchId: string,
+  params: { verdict?: string; decision?: string; offset?: number; limit?: number } = {}
+): Promise<{ batch: ImportBatch; total: number; data: ImportRecord[] }> {
+  const q = new URLSearchParams();
+  if (params.verdict) q.set("verdict", params.verdict);
+  if (params.decision) q.set("decision", params.decision);
+  q.set("offset", String(params.offset ?? 0));
+  q.set("limit", String(params.limit ?? 100));
+  return getJson(`/imports/${batchId}/records?${q.toString()}`);
+}
+
+export async function updateImportRecord(
+  batchId: string,
+  rowNumber: number,
+  data: { decision?: string; category_id?: number | null }
+) {
+  return mutate(`/imports/${batchId}/records/${rowNumber}`, "PATCH", data);
+}
+
+export async function bulkImportDecision(
+  batchId: string,
+  data: { decision: string; verdict?: string }
+) {
+  return mutate(`/imports/${batchId}/records/bulk`, "POST", data);
+}
+
+export async function commitImport(batchId: string): Promise<{ committed: number; total_minor: number }> {
+  return mutate(`/imports/${batchId}/commit`, "POST");
+}
+
+export async function rollbackImport(batchId: string): Promise<{ deleted: number }> {
+  return mutate(`/imports/${batchId}/rollback`, "POST");
+}
+
 // ── Formatting ──────────────────────────────────────────────────────────────
 
 /** Convert integer minor units to a display string, e.g. -1234 -> "-$12.34". */

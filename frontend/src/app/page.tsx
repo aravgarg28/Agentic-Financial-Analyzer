@@ -17,8 +17,9 @@ import LogoIcon from "@/components/LogoIcon";
 const ChatPanel = dynamic(() => import("@/components/ChatPanel"), { ssr: false });
 const DashboardCharts = dynamic(() => import("@/components/DashboardCharts"), { ssr: false });
 const AccountsPanel = dynamic(() => import("@/components/AccountsPanel"), { ssr: false });
+const ImportWizard = dynamic(() => import("@/components/ImportWizard"), { ssr: false });
 
-type Tab = "dashboard" | "accounts" | "chat";
+type Tab = "dashboard" | "accounts" | "import" | "chat";
 
 const slide = {
   enter: { opacity: 0, scale: 0.95, y: 20 },
@@ -295,7 +296,7 @@ export default function Home() {
             Overview
           </p>
           
-          {(["dashboard", "accounts", "chat"] as Tab[]).map((t) => {
+          {(["dashboard", "accounts", "import", "chat"] as Tab[]).map((t) => {
             const isActive = tab === t;
             return (
               <button
@@ -324,7 +325,7 @@ export default function Home() {
               >
                 {/* Icons */}
                 <span style={{ fontSize: 22 }}>
-                  {t === "dashboard" ? "📊" : t === "accounts" ? "🏦" : "💬"}
+                  {t === "dashboard" ? "📊" : t === "accounts" ? "🏦" : t === "import" ? "📥" : "💬"}
                 </span>
                 
                 <span className="sleek-text" style={{ textTransform: "capitalize", position: "relative", zIndex: 1, fontSize: 14 }}>
@@ -395,7 +396,7 @@ export default function Home() {
           marginBottom: 32, padding: "0 16px" 
         }}>
           <h2 className="sleek-text" style={{ fontSize: 24, color: "var(--text-primary)" }}>
-            {tab === "dashboard" ? "Overview" : tab === "accounts" ? "Accounts" : "Intelligence"}
+            {tab === "dashboard" ? "Overview" : tab === "accounts" ? "Accounts" : tab === "import" ? "Import CSV" : "Intelligence"}
           </h2>
           <div style={{ display: "flex", gap: 12 }}>
             {tab === "dashboard" && (
@@ -433,6 +434,17 @@ export default function Home() {
                 style={{ height: "100%", overflowY: "auto", padding: "8px 16px 48px" }}
               >
                 <AccountsPanel />
+              </motion.div>
+            ) : tab === "import" ? (
+              <motion.div
+                key="import"
+                variants={slide}
+                initial="enter"
+                animate="show"
+                exit="exit"
+                style={{ height: "100%", overflowY: "auto", padding: "8px 16px 48px" }}
+              >
+                <ImportWizard onDone={() => setTab("dashboard")} />
               </motion.div>
             ) : (
               <motion.div
