@@ -124,6 +124,31 @@ async def stage_batch(
     return summary
 
 
+class DedupRequest(BaseModel):
+    account_id: str | None = None
+
+
+@router.post("/{batch_id}/dedup")
+async def dedup_batch(
+    batch_id: str,
+    data: DedupRequest,
+    db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(require_principal),
+    _csrf: None = Depends(csrf_guard),
+) -> dict:
+    try:
+        summary = await service.dedup_batch(
+            db,
+            household_id=principal.household_id,
+            batch_public_id=batch_id,
+            account_public_id=data.account_id,
+        )
+    except service.LedgerError as exc:
+        raise _bad_request(exc) from exc
+    await db.commit()
+    return summary
+
+
 @router.get("/mappings")
 async def list_mappings(
     db: AsyncSession = Depends(get_db),

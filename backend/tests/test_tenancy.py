@@ -63,6 +63,7 @@ AUTHENTICATED_ROUTES = {
     ("POST", "/imports/upload"),
     ("GET", "/imports/{batch_id}/preview"),
     ("POST", "/imports/{batch_id}/stage"),
+    ("POST", "/imports/{batch_id}/dedup"),
     ("GET", "/imports/mappings"),
     ("POST", "/imports/mappings"),
     ("POST", "/agent/query"),

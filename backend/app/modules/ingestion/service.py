@@ -23,7 +23,13 @@ from app.modules.ingestion.models import (
     ImportedRecord,
 )
 from app.modules.ledger.accounts import resolve_institution
-from app.modules.ledger.service import LedgerError, resolve_account
+from app.modules.ledger.models import Transaction
+from app.modules.ledger.service import (
+    LedgerError,
+    compute_fingerprint,
+    normalize_description,
+    resolve_account,
+)
 
 PREVIEW_SAMPLE_ROWS = 10
 
@@ -355,3 +361,104 @@ async def stage_batch(
         "errors": error_count,
         "valid": len(parsed.rows) - error_count,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Duplicate detection (T-073)
+# --------------------------------------------------------------------------- #
+def record_fingerprint(account_id: int, record: ImportedRecord) -> str | None:
+    """Deterministic dedup key for a staged record, or None if it lacks the
+    parsed fields (a row with validation errors). Same basis as manual
+    transactions, so re-importing a manually-entered row also dedups."""
+    if record.parsed_amount_minor is None or record.parsed_date is None:
+        return None
+    return compute_fingerprint(
+        account_id=account_id,
+        booked_date=record.parsed_date,
+        amount_minor=record.parsed_amount_minor,
+        normalized_desc=normalize_description(record.parsed_description),
+    )
+
+
+async def dedup_batch(
+    session: AsyncSession,
+    *,
+    household_id: int,
+    batch_public_id: str,
+    account_public_id: str | None = None,
+) -> dict:
+    """Assign a dedup verdict to every staged record, comparing against the
+    committed ledger (exact fingerprint -> 'duplicate') and within the batch
+    (repeat fingerprint -> 'near_dup', kept for user review, never auto-dropped).
+    Requires the batch's target account. Sets default per-row decisions:
+    new -> accept, duplicate -> skip, near_dup -> pending."""
+    batch = await resolve_batch(session, household_id, batch_public_id)
+    if batch.status != "staged":
+        raise UploadError("This batch can no longer be deduplicated.")
+
+    # Resolve the target account (from the batch, or set it now).
+    if account_public_id:
+        account = await resolve_account(session, household_id, account_public_id)
+        batch.account_id = account.id
+    if batch.account_id is None:
+        raise UploadError("Select an account for this import before de-duplicating.")
+    account_id = batch.account_id
+
+    committed = set(
+        (
+            await session.execute(
+                select(Transaction.dedup_fingerprint).where(
+                    Transaction.household_id == household_id,
+                    Transaction.account_id == account_id,
+                    Transaction.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    records = list(
+        (
+            await session.execute(
+                select(ImportedRecord)
+                .where(ImportedRecord.import_batch_id == batch.id)
+                .order_by(ImportedRecord.row_number)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    seen_in_batch: set[str] = set()
+    counts = {"new": 0, "duplicate": 0, "near_dup": 0, "error": 0}
+    for record in records:
+        if record.validation and record.validation.get("errors"):
+            record.dedup_verdict = None
+            record.user_decision = "skip"
+            counts["error"] += 1
+            continue
+        fp = record_fingerprint(account_id, record)
+        if fp is None:
+            record.dedup_verdict = None
+            record.user_decision = "skip"
+            counts["error"] += 1
+            continue
+        if fp in committed:
+            record.dedup_verdict = "duplicate"
+            record.user_decision = "skip"
+            counts["duplicate"] += 1
+        elif fp in seen_in_batch:
+            record.dedup_verdict = "near_dup"
+            record.user_decision = "pending"
+            counts["near_dup"] += 1
+        else:
+            record.dedup_verdict = "new"
+            record.user_decision = "accept"
+            counts["new"] += 1
+            seen_in_batch.add(fp)
+
+    batch.new_count = counts["new"]
+    batch.dup_count = counts["duplicate"]
+    await session.flush()
+    return {"batch_id": batch.public_id, **counts}
